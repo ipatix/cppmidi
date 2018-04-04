@@ -5,6 +5,24 @@
 #include <string>
 
 namespace cppmidi {
+    std::vector<uint8_t> len2vlv(uint64_t len);
+    uint32_t vlv2len(const std::vector<uint8_t>& vlv);
+
+    class midi_event {
+        public:
+            uint64_t absolute_ticks() const {
+                return ticks;
+            }
+            virtual std::vector<uint8_t> event_data() const = 0;
+        protected:
+            midi_event(uint64_t ticks) : ticks(ticks) {}
+            uint64_t ticks;
+    };
+
+    struct midi_track {
+        std::vector<midi_event *> midi_events;
+    };
+
     struct midi_file {
         uint16_t time_division;
         std::vector<midi_track> midi_tracks;
@@ -14,21 +32,6 @@ namespace cppmidi {
         void load_from_file(const std::string& file_path);
         void save_to_file(const std::string& file_path);
         void sort_track_events();
-    };
-
-    struct midi_track {
-        std::vector<midi_event &> midi_events;
-    };
-
-    class midi_event {
-        public:
-            uint64_t absolute_ticks() {
-                return ticks;
-            }
-            virtual std::vector<uint8_t> event_data() = 0;
-        protected:
-            midi_event(uint64_t ticks) : ticks(ticks) {}
-            uint64_t ticks;
     };
 
     //=========================================================================
@@ -48,7 +51,7 @@ namespace cppmidi {
                     uint8_t key, uint8_t velocity)
                 : message_midi_event(ticks, midi_channel),
                 key(key), velocity(velocity) {}
-            std::vector<uint8_t event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t key, velocity;
     };
@@ -59,7 +62,7 @@ namespace cppmidi {
                     uint8_t key, uint8_t velocity)
                 : message_midi_event(ticks, midi_channel),
                 key(key), velocity(velocity) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t key, velocity;
     };
@@ -70,7 +73,7 @@ namespace cppmidi {
                     uint8_t key, uint8_t value)
                 : message_midi_event(ticks, midi_channel),
                 key(key), value(value) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t key, value;
     };
@@ -81,7 +84,7 @@ namespace cppmidi {
                     uint8_t controller, uint8_t value)
                 : message_midi_event(ticks, midi_channel),
                 controller(controller), value(value) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t controller, value;
     };
@@ -92,7 +95,7 @@ namespace cppmidi {
                     uint8_t program)
                 : message_midi_event(ticks, midi_channel),
                 program(program) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t program;
     };
@@ -103,7 +106,7 @@ namespace cppmidi {
                     uint8_t value)
                 : message_midi_event(ticks, midi_channel),
                 value(value) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t value;
     };
@@ -114,7 +117,7 @@ namespace cppmidi {
                     int16_t pitch)
                 : message_midi_event(ticks, midi_channel),
                 pitch(pitch) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             int16_t pitch;
     };
@@ -132,10 +135,10 @@ namespace cppmidi {
     class sequencenumber_meta_midi_event : public meta_midi_event {
         public:
             sequencenumber_meta_midi_event(uint64_t ticks, uint16_t seq_num)
-                : seq_num(seq_num), empty(false) {}
+                : meta_midi_event(ticks), seq_num(seq_num), empty(false) {}
             sequencenumber_meta_midi_event(uint64_t ticks)
-                : seq_num(0), empty(true) {}
-            std::vector<uint8_t> event_data() override;
+                : meta_midi_event(ticks), seq_num(0), empty(true) {}
+            std::vector<uint8_t> event_data() const override;
         private:
             uint16_t seq_num;
             bool empty;
@@ -145,7 +148,7 @@ namespace cppmidi {
         public:
             text_meta_midi_event(uint64_t ticks, const std::string& text)
                 : meta_midi_event(ticks), text(text) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::string text;
     };
@@ -154,7 +157,7 @@ namespace cppmidi {
         public:
             copyright_meta_midi_event(uint64_t ticks, const std::string& text)
                 : meta_midi_event(ticks), text(text) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::string text;
     };
@@ -163,7 +166,7 @@ namespace cppmidi {
         public:
             trackname_meta_midi_event(uint64_t ticks, const std::string& text)
                 : meta_midi_event(ticks), text(text) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::string text;
     };
@@ -172,7 +175,7 @@ namespace cppmidi {
         public:
             instrument_meta_midi_event(uint64_t ticks, const std::string& text)
                 : meta_midi_event(ticks), text(text) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::string text;
     };
@@ -181,7 +184,7 @@ namespace cppmidi {
         public:
             lyric_meta_midi_event(uint64_t ticks, const std::string& text)
                 : meta_midi_event(ticks), text(text) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::string text;
     };
@@ -190,7 +193,7 @@ namespace cppmidi {
         public:
             marker_meta_midi_event(uint64_t ticks, const std::string& text)
                 : meta_midi_event(ticks), text(text) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::string text;
     };
@@ -199,7 +202,7 @@ namespace cppmidi {
         public:
             cuepoint_meta_midi_event(uint64_t ticks, const std::string& text)
                 : meta_midi_event(ticks), text(text) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::string text;
     };
@@ -208,16 +211,16 @@ namespace cppmidi {
         public:
             channelprefix_meta_midi_event(uint64_t ticks, uint8_t channel)
                 : meta_midi_event(ticks), channel(channel) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t channel;
     };
 
     class endoftrack_meta_midi_event : public meta_midi_event {
         public:
-            endoftrack_meta_midi_event(uint64_t ticks, uint8_t channel)
+            endoftrack_meta_midi_event(uint64_t ticks)
                 : meta_midi_event(ticks) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
     };
 
     class tempo_meta_midi_event : public meta_midi_event {
@@ -227,7 +230,7 @@ namespace cppmidi {
             tempo_meta_midi_event(uint64_t ticks, double bpm)
                 : meta_midi_event(ticks),
                 us_per_beat(static_cast<uint64_t>(1000000.0 * 60.0 / bpm)) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint32_t us_per_beat;
     };
@@ -240,7 +243,7 @@ namespace cppmidi {
                 : meta_midi_event(ticks), frame_rate(frame_rate),
                 hour(hour), minute(minute), second(second),
                 frames(frames), frame_fractions(frame_fractions) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t frame_rate;
             uint8_t hour, minute, second;
@@ -255,7 +258,7 @@ namespace cppmidi {
                 : meta_midi_event(ticks),
                 numerator(numerator), denominator(denominator),
                 tick_clocks(tick_clocks), n32n(n32n) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             uint8_t numerator, denominator;
             uint8_t tick_clocks, n32n;
@@ -264,12 +267,12 @@ namespace cppmidi {
     class keysignature_meta_midi_event : public meta_midi_event {
         public:
             keysignature_meta_midi_event(uint64_t ticks, int8_t sharp_flats,
-                    bool minor)
-                : meta_midi_event(ticks), sharp_flats(sharp_flats), minor(minor) {}
-            std::vector<uint8_t> event_data() override;
+                    bool _minor)
+                : meta_midi_event(ticks), sharp_flats(sharp_flats), _minor(_minor) {}
+            std::vector<uint8_t> event_data() const override;
         private:
             int8_t sharp_flats;
-            bool minor;
+            bool _minor;
     };
 
     class sequencerspecific_meta_midi_event : public meta_midi_event {
@@ -277,7 +280,7 @@ namespace cppmidi {
             sequencerspecific_meta_midi_event(uint64_t ticks,
                     const std::vector<uint8_t>& data)
                 : meta_midi_event(ticks), data(data) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::vector<uint8_t> data;
     };
@@ -288,9 +291,9 @@ namespace cppmidi {
         public:
             sysex_midi_event(uint64_t ticks, const std::vector<uint8_t>& data,
                     bool first_chunk, bool last_chunk)
-                : meta_midi_event(ticks), data(data), first_chunk(first_chunk),
+                : midi_event(ticks), data(data), first_chunk(first_chunk),
                 last_chunk(last_chunk) {}
-            std::vector<uint8_t> event_data() override;
+            std::vector<uint8_t> event_data() const override;
         private:
             std::vector<uint8_t> data;
             bool first_chunk, last_chunk;
@@ -299,8 +302,8 @@ namespace cppmidi {
     class escape_midi_event : public midi_event {
         public:
             escape_midi_event(uint64_t ticks, const std::vector<uint8_t>& data)
-                : meta_midi_event(ticks), data(data) {}
-            std::vector<uint8_t> event_data() override;
+                : midi_event(ticks), data(data) {}
+            std::vector<uint8_t> event_data() const override;
         private:
             std::vector<uint8_t> data;
     };
