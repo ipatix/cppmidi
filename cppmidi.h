@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <memory>
 
 namespace cppmidi {
     std::vector<uint8_t> len2vlv(uint64_t len);
@@ -20,7 +21,7 @@ namespace cppmidi {
     };
 
     struct midi_track {
-        std::vector<midi_event *> midi_events;
+        std::vector<std::unique_ptr<midi_event>> midi_events;
     };
 
     struct midi_file {
@@ -30,7 +31,7 @@ namespace cppmidi {
         midi_file() : time_division(0) {}
 
         void load_from_file(const std::string& file_path);
-        void save_to_file(const std::string& file_path);
+        void save_to_file(const std::string& file_path) const;
         void sort_track_events();
     };
 

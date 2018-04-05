@@ -1,7 +1,26 @@
 #include <algorithm>
 #include <stdexcept>
+#include <fstream>
+
+#include <cstring>
+#include <cstdarg>
 
 #include "cppmidi.h"
+
+template<typename T, typename V>
+static void throw_assert(T a, V b, const std::string& msg) {
+    if (a != static_cast<T>(b))
+        throw std::runtime_error(msg.c_str());
+}
+
+static void throw_xcept(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    char msg[2048];
+    vsnprintf(msg, sizeof(msg), fmt, args);
+    va_end(args);
+    throw std::runtime_error(msg);
+}
 
 std::vector<uint8_t> cppmidi::len2vlv(uint64_t len) {
     if (len >= (1uLL << 32))
@@ -73,17 +92,71 @@ uint32_t cppmidi::vlv2len(const std::vector<uint8_t>& vlv) {
 
 //=============================================================================
 
-void cppmidi::midi_file::load_from_file(const std::string& file_path) {
+void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_file& mf) {
     // TODO
 }
 
-void cppmidi::midi_file::save_to_file(const std::string& file_path) {
+void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_file& mf) {
+    // TODO
+}
+
+void cppmidi::midi_file::load_from_file(const std::string& file_path) {
+    // read file
+    std::ifstream is(file_path, std::ios_base::binary);
+    if (!is.is_open())
+        throw_xcept("Error loading MIDI File: %s", strerror(errno));
+
+    is.seekg(0, std::ios_base::end);
+    long size = is.tellg();
+    is.seekg(0, std::ios_base::beg);
+    if (size < 0)
+        throw_xcept("Failed to obtain file size: %s", strerror(errno));
+
+    std::vector<uint8_t> midi_data(static_cast<size_t>(size));
+    is.read(reinterpret_cast<char *>(midi_data.data()), midi_data.size());
+    if (is.bad())
+        throw std::runtime_error("std::ifstream::read bad");
+    if (is.fail())
+        throw std::runtime_error("std::ifstream::read fail");
+    is.close();
+
+    // check header magics
+    throw_assert(midi_data.at(0), 'M', "Bad MIDI magic");
+    throw_assert(midi_data.at(1), 'T', "Bad MIDI magic");
+    throw_assert(midi_data.at(2), 'h', "Bad MIDI magic");
+    throw_assert(midi_data.at(3), 'd', "Bad MIDI magic");
+
+    // check header chunk len
+    throw_assert(midi_data.at(4), 0, "Bad File Header chunk len");
+    throw_assert(midi_data.at(5), 0, "Bad File Header chunk len");
+    throw_assert(midi_data.at(6), 0, "Bad File Header chunk len");
+    throw_assert(midi_data.at(7), 0, "Bad File Header chunk len");
+
+    uint8_t midi_type = midi_data.at(9);
+    if (midi_type > 2)
+        throw_xcept("Illegal MIDI file type: %u", midi_type);
+    if (midi_type == 2)
+        throw std::runtime_error("MIDI file type 2 is not supported");
+
+    this->time_division = static_cast<uint16_t>(
+            (midi_data.at(0xC) << 8) | midi_data.at(0xD));
+
+    if (midi_type == 0)
+        load_type_zero(midi_data, *this);
+    else
+        load_type_one(midi_data, *this);
+}
+
+void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
     // TODO
 }
 
 void cppmidi::midi_file::sort_track_events() {
     for (cppmidi::midi_track& tr : midi_tracks) {
-        auto cmp = [](const cppmidi::midi_event* a, const cppmidi::midi_event* b) {
+        auto cmp = [](
+                const std::unique_ptr<cppmidi::midi_event>& a,
+                const std::unique_ptr<cppmidi::midi_event>& b)
+        {
             return a->absolute_ticks() < b->absolute_ticks();
         };
         std::stable_sort(tr.midi_events.begin(), tr.midi_events.end(), cmp);
