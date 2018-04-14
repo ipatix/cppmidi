@@ -10,22 +10,10 @@
 template<typename T, typename V>
 static void throw_assert(T a, V b, const std::string& msg) {
     if (a != static_cast<T>(b))
-        throw std::runtime_error(msg.c_str());
-}
-
-static void throw_xcept(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    char msg[2048];
-    vsnprintf(msg, sizeof(msg), fmt, args);
-    va_end(args);
-    throw std::runtime_error(msg);
+        throw cppmidi::xcept("%s", msg.c_str());
 }
 
 std::vector<uint8_t> cppmidi::len2vlv(uint64_t len) {
-    if (len >= (1uLL << 32))
-        throw std::runtime_error("Cannot construct VLV > 2^32");
-
     if (len >= (1uLL << 28)) {
         // 5 byte vlv
         std::vector<uint8_t> retval = {
@@ -71,18 +59,18 @@ std::vector<uint8_t> cppmidi::len2vlv(uint64_t len) {
 
 uint32_t cppmidi::vlv2len(const std::vector<uint8_t>& vlv) {
     if (vlv.size() > 5)
-        throw std::runtime_error("vlv2len: vlv > 5 bytes");
+        throw xcept("vlv2len: vlv > 5 bytes");
     uint32_t retval = 0;
     unsigned int i = 1;
     for (uint8_t x : vlv) {
         if (i == 5 && (x & 0x70))
-            throw std::runtime_error("vlv2len: resulting int > 32 bits");
+            throw xcept("vlv2len: resulting int > 32 bits");
         if (i == vlv.size()) {
             if (x & 0x80)
-                throw std::runtime_error("vlv2len: len bit set on last byte");
+                throw xcept("vlv2len: len bit set on last byte");
         } else {
             if (!(x & 0x80))
-                throw std::runtime_error("vlv2len: len bit not set on preceding bytes");
+                throw xcept("vlv2len: len bit not set on preceding bytes");
         }
         retval = static_cast<uint32_t>((x & 0x7F) | (retval << 7));
         i += 1;
@@ -90,34 +78,531 @@ uint32_t cppmidi::vlv2len(const std::vector<uint8_t>& vlv) {
     return retval;
 }
 
-//=============================================================================
-
-void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_file& mf) {
-    // TODO
+uint32_t cppmidi::read_vlv(const std::vector<uint8_t>& midi_data, size_t& fpos) {
+    uint32_t retval = 0;
+    do {
+        if (retval >= 0x10000000)
+            throw xcept("Failed to read VLV (too big) at 0x%zx", fpos);
+        retval = static_cast<uint32_t>((midi_data.at(fpos) & 0x7F) |
+                (retval << 7));
+        // range check below is not required because we already checked it
+    } while (midi_data[fpos++] & 0x80);
+    return retval;
 }
 
-void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_file& mf) {
-    // TODO
+cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
+        size_t& fpos, uint8_t& current_midi_channel, running_state& current_rs,
+        bool& sysex_ongoing, uint32_t current_tick) {
+    // this logic parses one midi event
+    midi_event *retval = nullptr;
+    uint8_t cmd = midi_data.at(fpos++);
+    uint8_t ev_type = static_cast<uint8_t>(cmd >> 4);
+    uint8_t ev_ch = static_cast<uint8_t>(cmd & 0xF);
+
+    switch (ev_type) {
+    case 0x8:
+        // parse note off
+        retval = new noteoff_message_midi_event(
+                    current_tick, ev_ch,
+                    midi_data.at(fpos + 0),
+                    midi_data.at(fpos + 1));
+        fpos += 2;
+        current_midi_channel = ev_ch;
+        current_rs = running_state::NoteOff;
+        break;
+    case 0x9:
+        // parse note on
+        retval = new noteon_message_midi_event(
+                    current_tick, ev_ch,
+                    midi_data.at(fpos + 0),
+                    midi_data.at(fpos + 1));
+        fpos += 2;
+        current_midi_channel = ev_ch;
+        current_rs = running_state::NoteOn;
+        break;
+    case 0xA:
+        // parse note aftertouch
+        retval = new noteaftertouch_message_midi_event(
+                    current_tick, ev_ch,
+                    midi_data.at(fpos + 0),
+                    midi_data.at(fpos + 1));
+        fpos += 2;
+        current_midi_channel = ev_ch;
+        current_rs = running_state::NoteAftertouch;
+        break;
+    case 0xB:
+        // parse controller
+        retval = new controller_message_midi_event(
+                    current_tick, ev_ch,
+                    midi_data.at(fpos),
+                    midi_data.at(fpos + 1));
+        fpos += 2;
+        current_midi_channel = ev_ch;
+        current_rs = running_state::Controller;
+        break;
+    case 0xC:
+        // parse program change
+        retval = new program_message_midi_event(
+                    current_tick, ev_ch,
+                    midi_data.at(fpos++));
+        current_midi_channel = ev_ch;
+        current_rs = running_state::Program;
+        break;
+    case 0xD:
+        // parse channel aftertouch
+        retval = new channelaftertouch_message_midi_event(
+                    current_tick, ev_ch,
+                    midi_data.at(fpos++));
+        current_midi_channel = ev_ch;
+        current_rs = running_state::ChannelAftertouch;
+        break;
+    case 0xE:
+        // parse pitch bend
+        retval = new pitchbend_message_midi_event(
+                    current_tick, ev_ch, static_cast<int16_t>(
+                        ((midi_data.at(fpos + 0) & 0x7F) << 7) |
+                        (midi_data.at(fpos + 1) & 0x7F)));
+        fpos += 2;
+        current_midi_channel = ev_ch;
+        current_rs = running_state::PitchBend;
+        break;
+    case 0xF:
+        // parse meta or sysex
+        // ev_ch isn't really a MIDI channel here
+        if (ev_ch == 0xF) {
+            // parse meta event
+            uint8_t type = midi_data.at(fpos++);
+            uint32_t len = read_vlv(midi_data, fpos);
+            if (fpos + len > midi_data.size()) {
+                throw xcept("MIDI parser error: Meta Event reaching over end of file "
+                        "at 0x%X", fpos);
+            }
+
+            switch (type) {
+            case 0x0:
+                if (len == 0) {
+                    retval = new sequencenumber_meta_midi_event(current_tick);
+                } else if (len == 2) {
+                    uint16_t seq_num = static_cast<uint16_t>(
+                            (midi_data[fpos + 0] << 8) |
+                            midi_data[fpos + 1]);
+                    fpos += 2;
+                    retval = new sequencenumber_meta_midi_event(current_tick, seq_num);
+                } else {
+                    throw xcept("MIDI parser error: Invalid sequence number format "
+                            "at 0x%X", fpos);
+                }
+                break;
+            case 0x1:
+                {
+                    std::string text(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new text_meta_midi_event(current_tick, std::move(text));
+                    fpos += len;
+                }
+                break;
+            case 0x2:
+                {
+                    std::string copyright(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new copyright_meta_midi_event(current_tick, std::move(copyright));
+                    fpos += len;
+                }
+                break;
+            case 0x3:
+                {
+                    std::string trackname(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new trackname_meta_midi_event(current_tick, std::move(trackname));
+                    fpos += len;
+                }
+                break;
+            case 0x4:
+                {
+                    std::string instrument(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new instrument_meta_midi_event(current_tick, std::move(instrument));
+                    fpos += len;
+                }
+                break;
+            case 0x5:
+                {
+                    std::string lyric(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new lyric_meta_midi_event(current_tick, std::move(lyric));
+                    fpos += len;
+                }
+                break;
+            case 0x6:
+                {
+                    std::string marker(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new marker_meta_midi_event(current_tick, std::move(marker));
+                    fpos += len;
+                }
+                break;
+            case 0x7:
+                {
+                    std::string cuepoint(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new cuepoint_meta_midi_event(current_tick, std::move(cuepoint));
+                    fpos += len;
+                }
+                break;
+            case 0x8:
+                {
+                    std::string programname(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new programname_meta_midi_event(current_tick, std::move(programname));
+                    fpos += len;
+                }
+                break;
+            case 0x9:
+                {
+                    std::string devicename(reinterpret_cast<const char*>(&midi_data[fpos]),
+                            reinterpret_cast<const char*>(&midi_data[fpos + len]));
+                    retval = new devicename_meta_midi_event(current_tick, std::move(devicename));
+                    fpos += len;
+                }
+                break;
+            case 0x20:
+                if (len != 1) {
+                    throw xcept("MIDI parser error: Invalid Channel Prefix "
+                            "at 0x%X", fpos);
+                }
+                retval = new channelprefix_meta_midi_event(current_tick, midi_data[fpos++]);
+                break;
+            case 0x21:
+                if (len != 1) {
+                    throw xcept("MIDI parser error: Invalid MIDI Port "
+                            "at 0x%X", fpos);
+                }
+                retval = new midiport_meta_midi_event(current_tick, midi_data[fpos++]);
+                break;
+            case 0x2F:
+                // signal the calling function that the end of track has been reached
+                retval = nullptr;
+                break;
+            case 0x51:
+                if (len != 3) {
+                    throw xcept("MIDI parser error: Invalid Tempo "
+                            "at 0x%X", fpos);
+                } else {
+                    uint32_t tempo = midi_data[fpos++] << 16;
+                    tempo |= midi_data[fpos++] << 8;
+                    tempo |= midi_data[fpos++];
+                    retval = new tempo_meta_midi_event(current_tick, tempo);
+                }
+                break;
+            case 0x54:
+                if (len != 5) {
+                    throw xcept("MIDI parser error: Invalid SMPTE Offset "
+                            "at 0x%X", fpos);
+                } else {
+                    uint8_t frame_rate = static_cast<uint8_t>(midi_data[fpos] >> 6);
+                    uint8_t hour = static_cast<uint8_t>(midi_data[fpos++] & 0x3F);
+                    uint8_t minute = midi_data[fpos++];
+                    uint8_t second = midi_data[fpos++];
+                    uint8_t frames = midi_data[fpos++];
+                    uint8_t frame_fractions = midi_data[fpos++];
+                    retval = new smpteoffset_meta_midi_event(current_tick,
+                            frame_rate, hour, minute, second, frames,
+                            frame_fractions);
+                }
+                break;
+            case 0x58:
+                if (len != 4) {
+                    throw xcept("MIDI parser error: Invalid Time Signature "
+                            "at 0x%X", fpos);
+                } else {
+                    uint8_t numerator = midi_data[fpos++];
+                    uint8_t denominator = midi_data[fpos++];
+                    uint8_t clocks = midi_data[fpos++];
+                    uint8_t n32n = midi_data[fpos++];
+                    retval = new timesignature_meta_midi_event(current_tick,
+                            numerator, denominator, clocks, n32n);
+                }
+                break;
+            case 0x59:
+                if (len != 2) {
+                    throw xcept("MIDI parser error: Invalid Key Signature "
+                            "at 0x%X", fpos);
+                } else {
+                    int8_t sharp_flats = static_cast<int8_t>(midi_data[fpos++]);
+                    bool _minor = static_cast<bool>(midi_data[fpos++]);
+                    retval = new keysignature_meta_midi_event(current_tick,
+                            sharp_flats, _minor);
+                }
+                break;
+            case 0x7F:
+                {
+                    std::vector<uint8_t> data(&midi_data[fpos], &midi_data[fpos + len]);
+                    fpos += len;
+                    retval = new sequencerspecific_meta_midi_event(current_tick, std::move(data));
+                }
+                break;
+            default:
+                throw xcept("MIDI parser error: Unknown Meta Event: %02X "
+                        "at 0x%X", static_cast<uint32_t>(type), fpos);
+            }
+        } else if (ev_ch == 0x7) {
+            uint32_t len = read_vlv(midi_data, fpos);
+            if (fpos + len > midi_data.size()) {
+                throw xcept("MIDI parser error: SysEx/Escape Event reaching over end of file "
+                        "at 0x%X", fpos);
+            }
+            std::vector<uint8_t> data(&midi_data[fpos], &midi_data[fpos + len]);
+            fpos += len;
+            if (sysex_ongoing) {
+                // sysex continuation
+                if (len < 1) {
+                    throw xcept("MIDI parser error: Unable to Read ongoing SysEx Terminal "
+                            "at 0x%X", fpos);
+                }
+                if (data[data.size() - 1] == 0x7F)
+                    sysex_ongoing = false;
+                retval = new sysex_midi_event(current_tick,
+                        std::move(data), false);
+            } else {
+                // escape sequence
+                retval = new escape_midi_event(current_tick, std::move(data));
+            }
+        } else if (ev_ch == 0x0) {
+            // sysex begin
+            uint32_t len = read_vlv(midi_data, fpos);
+            if (fpos + len > midi_data.size()) {
+                throw xcept("MIDI parser error: SysEx/Escape Event reaching over end of file "
+                        "at 0x%X", fpos);
+            }
+            std::vector<uint8_t> data(&midi_data[fpos], &midi_data[fpos + len]);
+            fpos += len;
+            if (len < 1) {
+                throw xcept("MIDI parser error: Unable to Read SysEx Terminal "
+                        "at 0x%X", fpos);
+            }
+            if (data[data.size() - 1] == 0x7F)
+                sysex_ongoing = false;
+            else
+                sysex_ongoing = true;
+            retval = new sysex_midi_event(current_tick, std::move(data), true);
+        } else {
+            throw xcept("MIDI parser error: Bad Byte 0xF%X "
+                    " at 0x%X", ev_ch, fpos);
+        }
+        break;
+    default:
+        // parse dependent on running state
+        switch (current_rs) {
+        case running_state::NoteOff:
+            retval = new noteoff_message_midi_event(current_tick, current_midi_channel,
+                    cmd, midi_data.at(fpos++));
+            break;
+        case running_state::NoteOn:
+            {
+                uint8_t vel = midi_data.at(fpos++);
+                if (vel) {
+                    retval = new noteon_message_midi_event(current_tick, current_midi_channel,
+                            cmd, vel);
+                } else {
+                    retval = new noteoff_message_midi_event(current_tick, current_midi_channel,
+                            cmd, vel);
+                }
+            }
+            break;
+        case running_state::NoteAftertouch:
+            retval = new noteaftertouch_message_midi_event(current_tick, current_midi_channel,
+                    cmd, midi_data.at(fpos++));
+            break;
+        case running_state::Controller:
+            retval = new controller_message_midi_event(current_tick, current_midi_channel,
+                    cmd, midi_data.at(fpos++));
+            break;
+        case running_state::Program:
+            retval = new program_message_midi_event(current_tick, current_midi_channel,
+                    cmd);
+            break;
+        case running_state::ChannelAftertouch:
+            retval = new channelaftertouch_message_midi_event(current_tick,
+                    current_midi_channel, cmd);
+            break;
+        case running_state::PitchBend:
+            {
+                int16_t pitch = static_cast<int16_t>(midi_data.at(fpos++) & 0x7F);
+                pitch = static_cast<int16_t>(pitch | ((midi_data.at(fpos++) & 0x7F) << 7));
+                // midi data is unsigned, parse as signed, subtract bias
+                pitch = static_cast<int16_t>(pitch - 0x2000);
+                retval = new pitchbend_message_midi_event(current_tick, current_midi_channel,
+                        pitch);
+            }
+            break;
+        default:
+            throw xcept("MIDI parser error: Use of running state without inital command "
+                    "at 0x%X", fpos);
+        }
+        break;
+    }
+    return retval;
+}
+
+
+//=============================================================================
+
+static void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_file& mf) {
+    using namespace cppmidi;
+    uint16_t num_tracks = static_cast<uint16_t>(
+            (midi_data.at(0xA) << 8) | midi_data.at(0xB));
+    if (num_tracks != 1)
+        throw xcept("MIDI type 0 with more than one track");
+    size_t fpos = 0xE;
+
+    // one track for one channel
+    for (int i = 0; i < 16; i++) {
+        mf.midi_tracks.emplace_back();
+    }
+
+    size_t track_start = fpos;
+    uint32_t current_tick = 0;
+    uint8_t current_midi_channel = 0;
+    uint8_t current_meta_track = 0;
+    running_state current_state = running_state::Undef;
+    bool sysex_ongoing = false;
+
+    throw_assert(midi_data.at(fpos++), 'M', "Bad MIDI Track Magic");
+    throw_assert(midi_data.at(fpos++), 'T', "Bad MIDI Track Magic");
+    throw_assert(midi_data.at(fpos++), 'r', "Bad MIDI Track Magic");
+    throw_assert(midi_data.at(fpos++), 'k', "Bad MIDI Track Magic");
+
+    uint32_t track_length = static_cast<uint32_t>(
+            (midi_data.at(fpos + 0) << 24) |
+            (midi_data.at(fpos + 1) << 16) |
+            (midi_data.at(fpos + 2) << 8) |
+            midi_data.at(fpos + 3));
+
+    while (1) {
+        current_tick += read_vlv(midi_data, fpos);
+        midi_event *ev = read_event(midi_data, fpos,
+                current_midi_channel, current_state, sysex_ongoing,
+                current_tick);
+        if (ev == nullptr) {
+            break;
+        }
+
+        uint8_t insert_track = 0;
+
+        switch (ev->event_type()) {
+        case ev_type::MsgNoteOff:
+        case ev_type::MsgNoteOn:
+        case ev_type::MsgNoteAftertouch:
+        case ev_type::MsgController:
+        case ev_type::MsgProgram:
+        case ev_type::MsgChannelAftertouch:
+        case ev_type::MsgPitchBend:
+            insert_track = static_cast
+                <cppmidi::message_midi_event*>
+                (ev)->channel() & 0xF;
+            break;
+        case ev_type::MetaSequenceNumber:
+        case ev_type::MetaText:
+        case ev_type::MetaCopyright:
+        case ev_type::MetaTrackName:
+        case ev_type::MetaInstrument:
+        case ev_type::MetaLyric:
+        case ev_type::MetaMarker:
+        case ev_type::MetaCuepoint:
+        case ev_type::MetaProgramName:
+        case ev_type::MetaDeviceName:
+        case ev_type::MetaMidiPort:
+        case ev_type::MetaEndOfTrack:
+        case ev_type::MetaSMPTE:
+        case ev_type::MetaTimeSignature:
+        case ev_type::MetaKeySignature:
+        case ev_type::MetaSequencerSpecific:
+            insert_track = current_meta_track;
+            break;
+        case ev_type::MetaChannelPrefix:
+            insert_track = current_meta_track = static_cast
+                <cppmidi::channelprefix_meta_midi_event*>
+                (ev)->get_channel() & 0xF;
+            break;
+        case ev_type::MetaTempo:
+        case ev_type::SysEx:
+        case ev_type::Escape:
+            insert_track = 0;
+            break;
+        }
+
+        mf.midi_tracks[insert_track].midi_events.emplace_back(ev);
+    }
+
+    if (track_start + track_length != fpos) {
+        throw xcept("MIDI Type 1 error: Incorrect Track Length for track %u "
+                ", track data ends at 0x%X", fpos);
+    }
+}
+
+static void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_file& mf) {
+    using namespace cppmidi;
+    uint16_t num_tracks = static_cast<uint16_t>(
+            (midi_data.at(0xA) << 8) | midi_data.at(0xB));
+    size_t fpos = 0xE;
+
+    for (uint16_t trk = 0; trk < num_tracks; trk++) {
+        mf.midi_tracks.emplace_back();
+        cppmidi::midi_track& ctrk = mf.midi_tracks[trk];
+
+        size_t track_start = fpos;
+        uint32_t current_tick = 0;
+        uint8_t current_midi_channel = 0;
+        cppmidi::running_state current_state = cppmidi::running_state::Undef;
+        bool sysex_ongoing = false;
+
+        throw_assert(midi_data.at(fpos++), 'M', "Bad MIDI Track Magic");
+        throw_assert(midi_data.at(fpos++), 'T', "Bad MIDI Track Magic");
+        throw_assert(midi_data.at(fpos++), 'r', "Bad MIDI Track Magic");
+        throw_assert(midi_data.at(fpos++), 'k', "Bad MIDI Track Magic");
+
+        uint32_t track_length = static_cast<uint32_t>(
+                (midi_data.at(fpos + 0) << 24) |
+                (midi_data.at(fpos + 1) << 16) |
+                (midi_data.at(fpos + 2) << 8) |
+                midi_data.at(fpos + 3));
+
+        while (1) {
+            current_tick += read_vlv(midi_data, fpos);
+            cppmidi::midi_event *ev = read_event(midi_data, fpos,
+                    current_midi_channel, current_state, sysex_ongoing,
+                    current_tick);
+            if (ev == nullptr) {
+                break;
+            }
+            ctrk.midi_events.emplace_back(ev);
+        }
+
+        if (track_start + track_length != fpos) {
+            throw xcept("MIDI Type 1 error: Incorrect Track Length for track %u "
+                    ", track data ends at 0x%X", fpos);
+        }
+    }
 }
 
 void cppmidi::midi_file::load_from_file(const std::string& file_path) {
     // read file
     std::ifstream is(file_path, std::ios_base::binary);
     if (!is.is_open())
-        throw_xcept("Error loading MIDI File: %s", strerror(errno));
+        throw xcept("Error loading MIDI File: %s", strerror(errno));
 
     is.seekg(0, std::ios_base::end);
     long size = is.tellg();
     is.seekg(0, std::ios_base::beg);
     if (size < 0)
-        throw_xcept("Failed to obtain file size: %s", strerror(errno));
+        throw xcept("Failed to obtain file size: %s", strerror(errno));
 
     std::vector<uint8_t> midi_data(static_cast<size_t>(size));
     is.read(reinterpret_cast<char *>(midi_data.data()), midi_data.size());
     if (is.bad())
-        throw std::runtime_error("std::ifstream::read bad");
+        throw xcept("std::ifstream::read bad");
     if (is.fail())
-        throw std::runtime_error("std::ifstream::read fail");
+        throw xcept("std::ifstream::read fail");
     is.close();
 
     // check header magics
@@ -134,9 +619,9 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
 
     uint8_t midi_type = midi_data.at(9);
     if (midi_type > 2)
-        throw_xcept("Illegal MIDI file type: %u", midi_type);
+        throw xcept("Illegal MIDI file type: %u", midi_type);
     if (midi_type == 2)
-        throw std::runtime_error("MIDI file type 2 is not supported");
+        throw xcept("MIDI file type 2 is not supported");
 
     this->time_division = static_cast<uint16_t>(
             (midi_data.at(0xC) << 8) | midi_data.at(0xD));
@@ -172,11 +657,19 @@ std::vector<uint8_t> cppmidi::noteoff_message_midi_event::event_data() const {
     return retval;
 }
 
+cppmidi::ev_type cppmidi::noteoff_message_midi_event::event_type() const {
+    return ev_type::MsgNoteOff;
+}
+
 std::vector<uint8_t> cppmidi::noteon_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0x9 << 4)), key, velocity
     };
     return retval;
+}
+
+cppmidi::ev_type cppmidi::noteon_message_midi_event::event_type() const {
+    return ev_type::MsgNoteOn;
 }
 
 std::vector<uint8_t> cppmidi::noteaftertouch_message_midi_event::event_data() const {
@@ -186,11 +679,19 @@ std::vector<uint8_t> cppmidi::noteaftertouch_message_midi_event::event_data() co
     return retval;
 }
 
+cppmidi::ev_type cppmidi::noteaftertouch_message_midi_event::event_type() const {
+    return ev_type::MsgNoteAftertouch;
+}
+
 std::vector<uint8_t> cppmidi::controller_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0xB << 4)), controller, value
     };
     return retval;
+}
+
+cppmidi::ev_type cppmidi::controller_message_midi_event::event_type() const {
+    return ev_type::MsgController;
 }
 
 std::vector<uint8_t> cppmidi::program_message_midi_event::event_data() const {
@@ -200,14 +701,22 @@ std::vector<uint8_t> cppmidi::program_message_midi_event::event_data() const {
     return retval;
 }
 
-std::vector<uint8_t> cppmidi::channel_aftertouch_message_midi_event::event_data() const {
+cppmidi::ev_type cppmidi::program_message_midi_event::event_type() const {
+    return ev_type::MsgProgram;
+}
+
+std::vector<uint8_t> cppmidi::channelaftertouch_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0xD << 4)), value
     };
     return retval;
 }
 
-std::vector<uint8_t> cppmidi::pitch_bend_message_midi_event::event_data() const {
+cppmidi::ev_type cppmidi::channelaftertouch_message_midi_event::event_type() const {
+    return ev_type::MsgChannelAftertouch;
+}
+
+std::vector<uint8_t> cppmidi::pitchbend_message_midi_event::event_data() const {
     uint16_t pitch_biased = static_cast<uint16_t>(pitch + 0x2000);
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0xE << 4)),
@@ -215,6 +724,10 @@ std::vector<uint8_t> cppmidi::pitch_bend_message_midi_event::event_data() const 
         static_cast<uint8_t>((pitch_biased >> 7) & 0x7F)
     };
     return retval;
+}
+
+cppmidi::ev_type cppmidi::pitchbend_message_midi_event::event_type() const {
+    return ev_type::MsgPitchBend;
 }
 
 //=============================================================================
@@ -235,12 +748,275 @@ std::vector<uint8_t> cppmidi::sequencenumber_meta_midi_event::event_data() const
     }
 }
 
+cppmidi::ev_type cppmidi::sequencenumber_meta_midi_event::event_type() const {
+    return ev_type::MetaSequenceNumber;
+}
+
 std::vector<uint8_t> cppmidi::text_meta_midi_event::event_data() const {
-    std::vector<uint8_t> retval = { 0xFF };
+    std::vector<uint8_t> retval = { 0xFF, 0x01 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
     retval.insert(retval.end(), vlv.begin(), vlv.end());
     retval.insert(retval.end(),
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
+}
+
+cppmidi::ev_type cppmidi::text_meta_midi_event::event_type() const {
+    return ev_type::MetaText;
+}
+
+std::vector<uint8_t> cppmidi::copyright_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x02 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::copyright_meta_midi_event::event_type() const {
+    return ev_type::MetaCopyright;
+}
+
+std::vector<uint8_t> cppmidi::trackname_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x03 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::trackname_meta_midi_event::event_type() const {
+    return ev_type::MetaTrackName;
+}
+
+std::vector<uint8_t> cppmidi::instrument_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x04 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::instrument_meta_midi_event::event_type() const {
+    return ev_type::MetaInstrument;
+}
+
+std::vector<uint8_t> cppmidi::lyric_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x05 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::lyric_meta_midi_event::event_type() const {
+    return ev_type::MetaLyric;
+}
+
+std::vector<uint8_t> cppmidi::marker_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x06 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::marker_meta_midi_event::event_type() const {
+    return ev_type::MetaMarker;
+}
+
+std::vector<uint8_t> cppmidi::cuepoint_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x07 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::cuepoint_meta_midi_event::event_type() const {
+    return ev_type::MetaCuepoint;
+}
+
+std::vector<uint8_t> cppmidi::programname_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x08 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::programname_meta_midi_event::event_type() const {
+    return ev_type::MetaProgramName;
+}
+
+std::vector<uint8_t> cppmidi::devicename_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x09 };
+    std::vector<uint8_t> vlv = len2vlv(text.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(),
+            reinterpret_cast<const uint8_t*>(&text[0]),
+            reinterpret_cast<const uint8_t*>(&text[text.size()]));
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::devicename_meta_midi_event::event_type() const {
+    return ev_type::MetaDeviceName;
+}
+
+std::vector<uint8_t> cppmidi::channelprefix_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x20, 1, channel };
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::channelprefix_meta_midi_event::event_type() const {
+    return ev_type::MetaChannelPrefix;
+}
+
+std::vector<uint8_t> cppmidi::midiport_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x21, 1, port };
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::midiport_meta_midi_event::event_type() const {
+    return ev_type::MetaMidiPort;
+}
+
+std::vector<uint8_t> cppmidi::endoftrack_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x2F, 0 };
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::endoftrack_meta_midi_event::event_type() const {
+    return ev_type::MetaEndOfTrack;
+}
+
+std::vector<uint8_t> cppmidi::tempo_meta_midi_event::event_data() const {
+    uint8_t a = static_cast<uint8_t>(us_per_beat >> 16);
+    uint8_t b = static_cast<uint8_t>(us_per_beat >> 8);
+    uint8_t c = static_cast<uint8_t>(us_per_beat >> 0);
+    std::vector<uint8_t> retval = { 0xFF, 0x51, 3, a, b, c };
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::tempo_meta_midi_event::event_type() const {
+    return ev_type::MetaTempo;
+}
+
+std::vector<uint8_t> cppmidi::smpteoffset_meta_midi_event::event_data() const {
+    uint8_t hr = static_cast<uint8_t>((frame_rate << 6) | hour);
+    std::vector<uint8_t> retval = { 0xFF, 0x54, 5, hr, minute, second, frames, frame_fractions };
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::smpteoffset_meta_midi_event::event_type() const {
+    return ev_type::MetaSMPTE;
+}
+
+void cppmidi::smpteoffset_meta_midi_event::errchk() {
+    if (frame_rate > 3 || hour > 23 || minute > 59 ||
+            second > 59 || frame_fractions > 99) {
+        throw xcept("Invalid SMPTE offset arguments");
+    }
+    if ((frame_rate == 0 && frames > 23) ||
+            (frame_rate == 1 && frames > 24) ||
+            (frame_rate == 2 && frames > 28) ||
+            (frame_rate == 3 && frames > 29)) {
+        throw xcept("Invalid SMPTE offset arguments");
+    }
+}
+
+std::vector<uint8_t> cppmidi::timesignature_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x58, 4, numerator, denominator, tick_clocks, n32n };
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::timesignature_meta_midi_event::event_type() const {
+    return ev_type::MetaTimeSignature;
+}
+
+std::vector<uint8_t> cppmidi::keysignature_meta_midi_event::event_data() const {
+    uint8_t sf = static_cast<uint8_t>(sharp_flats);
+    std::vector<uint8_t> retval = { 0xFF, 0x59, 2, sf, _minor };
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::keysignature_meta_midi_event::event_type() const {
+    return ev_type::MetaKeySignature;
+}
+
+void cppmidi::keysignature_meta_midi_event::errchk() {
+    if (sharp_flats < -7 || sharp_flats > 7)
+        throw xcept("Time Signature: Invalid n# of sharps");
+}
+
+std::vector<uint8_t> cppmidi::sequencerspecific_meta_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xFF, 0x7F };
+    std::vector<uint8_t> vlv = len2vlv(data.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(), data.begin(), data.end());
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::sequencerspecific_meta_midi_event::event_type() const {
+    return ev_type::MetaSequencerSpecific;
+}
+
+//=============================================================================
+
+std::vector<uint8_t> cppmidi::sysex_midi_event::event_data() const {
+    std::vector<uint8_t> retval;
+    if (first_chunk)
+        retval.push_back(0xF0);
+    else
+        retval.push_back(0xF7);
+    std::vector<uint8_t> vlv = len2vlv(data.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(), data.begin(), data.end());
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::sysex_midi_event::event_type() const {
+    return ev_type::SysEx;
+}
+
+std::vector<uint8_t> cppmidi::escape_midi_event::event_data() const {
+    std::vector<uint8_t> retval = { 0xF7 };
+    std::vector<uint8_t> vlv = len2vlv(data.size());
+    retval.insert(retval.end(), vlv.begin(), vlv.end());
+    retval.insert(retval.end(), data.begin(), data.end());
+    return retval;
+}
+
+cppmidi::ev_type cppmidi::escape_midi_event::event_type() const {
+    return ev_type::Escape;
+}
+
+//=============================================================================
+
+cppmidi::xcept::xcept(const char *fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    char msg_buf[2048];
+    vsnprintf(msg_buf, sizeof(msg_buf), fmt, args);
+    msg = msg_buf;
+    va_end(args);
+}
+
+const char *cppmidi::xcept::what() const noexcept {
+    return msg.c_str();
 }
