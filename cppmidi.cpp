@@ -749,6 +749,7 @@ void cppmidi::midi_file::convert_time_division(uint16_t time_division) {
             ev->ticks = static_cast<uint32_t>(ticks);
         }
     }
+    this->time_division = time_division;
 }
 
 //=============================================================================
