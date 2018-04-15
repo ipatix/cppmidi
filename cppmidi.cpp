@@ -7,12 +7,15 @@
 
 #include "cppmidi.h"
 
+// #include <cstdio>
+
 template<typename T, typename V>
 static void throw_assert(T a, V b, const std::string& msg) {
     if (a != static_cast<T>(b))
         throw cppmidi::xcept("%s", msg.c_str());
 }
 
+// converts an uint to a [v]ariable [l]ength [v]alue
 std::vector<uint8_t> cppmidi::len2vlv(uint64_t len) {
     if (len >= (1uLL << 28)) {
         // 5 byte vlv
@@ -57,6 +60,7 @@ std::vector<uint8_t> cppmidi::len2vlv(uint64_t len) {
     }
 }
 
+// converts a [v]ariable [l]ength [v]alue to a uint
 uint32_t cppmidi::vlv2len(const std::vector<uint8_t>& vlv) {
     if (vlv.size() > 5)
         throw xcept("vlv2len: vlv > 5 bytes");
@@ -548,9 +552,7 @@ static void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_f
 
     for (uint16_t trk = 0; trk < num_tracks; trk++) {
         mf.midi_tracks.emplace_back();
-        cppmidi::midi_track& ctrk = mf.midi_tracks[trk];
 
-        size_t track_start = fpos;
         uint32_t current_tick = 0;
         uint8_t current_midi_channel = 0;
         cppmidi::running_state current_state = cppmidi::running_state::Undef;
@@ -566,21 +568,25 @@ static void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_f
                 (midi_data.at(fpos + 1) << 16) |
                 (midi_data.at(fpos + 2) << 8) |
                 midi_data.at(fpos + 3));
+        fpos += 4;
+        size_t track_start = fpos;
 
         while (1) {
+            //printf("Parsing VLV at location 0x%zX\n", fpos);
             current_tick += read_vlv(midi_data, fpos);
+            //printf("Parsing Event at location 0x%zX\n", fpos);
             cppmidi::midi_event *ev = read_event(midi_data, fpos,
                     current_midi_channel, current_state, sysex_ongoing,
                     current_tick);
             if (ev == nullptr) {
                 break;
             }
-            ctrk.midi_events.emplace_back(ev);
+            mf.midi_tracks[trk].midi_events.emplace_back(ev);
         }
 
         if (track_start + track_length != fpos) {
             throw xcept("MIDI Type 1 error: Incorrect Track Length for track %u "
-                    ", track data ends at 0x%X", fpos);
+                    ", track data ends at 0x%X", trk, fpos);
         }
     }
 }
@@ -615,9 +621,10 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
     throw_assert(midi_data.at(4), 0, "Bad File Header chunk len");
     throw_assert(midi_data.at(5), 0, "Bad File Header chunk len");
     throw_assert(midi_data.at(6), 0, "Bad File Header chunk len");
-    throw_assert(midi_data.at(7), 0, "Bad File Header chunk len");
+    throw_assert(midi_data.at(7), 6, "Bad File Header chunk len");
 
-    uint8_t midi_type = midi_data.at(9);
+    uint16_t midi_type = static_cast<int16_t>(
+            (midi_data.at(8) << 8) | midi_data.at(9));
     if (midi_type > 2)
         throw xcept("Illegal MIDI file type: %u", midi_type);
     if (midi_type == 2)
@@ -633,7 +640,75 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
 }
 
 void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
-    // TODO
+    std::vector<uint8_t> data;
+    // file magic
+    data.push_back(static_cast<uint8_t>('M'));
+    data.push_back(static_cast<uint8_t>('T'));
+    data.push_back(static_cast<uint8_t>('h'));
+    data.push_back(static_cast<uint8_t>('d'));
+
+    // header chunk size
+    data.push_back(0);
+    data.push_back(0);
+    data.push_back(0);
+    data.push_back(6);
+
+    // midi type #1
+    data.push_back(0);
+    data.push_back(1);
+
+    // num tracks
+    data.push_back(static_cast<uint8_t>(midi_tracks.size() << 8));
+    data.push_back(static_cast<uint8_t>(midi_tracks.size()));
+
+    // time division
+    data.push_back(static_cast<uint8_t>(time_division << 8));
+    data.push_back(static_cast<uint8_t>(time_division));
+
+    std::vector<uint8_t> zero_vlv = len2vlv(0);
+    std::vector<uint8_t> eot_data = endoftrack_meta_midi_event(0).event_data();
+
+    for (size_t trk = 0; trk < midi_tracks.size(); trk++) {
+        // track header
+        data.push_back(static_cast<uint8_t>('M'));
+        data.push_back(static_cast<uint8_t>('T'));
+        data.push_back(static_cast<uint8_t>('r'));
+        data.push_back(static_cast<uint8_t>('k'));
+
+        // spaceholder for
+        uint32_t track_len_pos = static_cast<uint32_t>(data.size());
+        data.push_back(0);
+        data.push_back(0);
+        data.push_back(0);
+        data.push_back(0);
+
+        // event data
+        uint32_t track_start_pos = static_cast<uint32_t>(data.size());
+        uint32_t last_event_time = 0;
+        for (const std::unique_ptr<midi_event>& ev : midi_tracks[trk].midi_events) {
+            std::vector<uint8_t> ev_data = ev->event_data();
+            if (ev->event_type() == ev_type::MetaEndOfTrack)
+                break;
+            uint32_t event_time = ev->absolute_ticks();
+            std::vector<uint8_t> vlv = len2vlv(event_time - last_event_time);
+            last_event_time = event_time;
+            data.insert(data.end(), vlv.begin(), vlv.end());
+            data.insert(data.end(), ev_data.begin(), ev_data.end());
+        }
+        data.insert(data.end(), zero_vlv.begin(), zero_vlv.end());
+        data.insert(data.end(), eot_data.begin(), eot_data.end());
+        
+        uint32_t track_end_pos = static_cast<uint32_t>(data.size());
+        uint32_t track_len = track_end_pos - track_start_pos;
+        data[track_len_pos + 0] = static_cast<uint8_t>(track_len >> 24);
+        data[track_len_pos + 1] = static_cast<uint8_t>(track_len >> 16);
+        data[track_len_pos + 2] = static_cast<uint8_t>(track_len >> 8);
+        data[track_len_pos + 3] = static_cast<uint8_t>(track_len >> 0);
+    }
+
+    std::ofstream fout(file_path, std::ios::out | std::ios::binary);
+    fout.write(reinterpret_cast<char*>(data.data()), data.size());
+    fout.close();
 }
 
 void cppmidi::midi_file::sort_track_events() {

@@ -88,7 +88,7 @@ namespace cppmidi {
 
     class message_midi_event : public midi_event {
     public:
-        uint8_t channel();
+        uint8_t channel() const { return midi_channel; }
     protected:
         message_midi_event(uint32_t ticks, uint8_t midi_channel)
             : midi_event(ticks), midi_channel(midi_channel & 0xF) {}
