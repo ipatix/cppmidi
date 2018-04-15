@@ -293,9 +293,9 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                     throw xcept("MIDI parser error: Invalid Tempo "
                             "at 0x%X", fpos);
                 } else {
-                    uint32_t tempo = midi_data[fpos++] << 16;
-                    tempo |= midi_data[fpos++] << 8;
-                    tempo |= midi_data[fpos++];
+                    uint32_t tempo = static_cast<uint32_t>(midi_data[fpos++] << 16);
+                    tempo |= static_cast<uint32_t>(midi_data[fpos++] << 8);
+                    tempo |= static_cast<uint32_t>(midi_data[fpos++]);
                     retval = new tempo_meta_midi_event(current_tick, tempo);
                 }
                 break;
@@ -612,7 +612,8 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
         throw xcept("Failed to obtain file size: %s", strerror(errno));
 
     std::vector<uint8_t> midi_data(static_cast<size_t>(size));
-    is.read(reinterpret_cast<char *>(midi_data.data()), midi_data.size());
+    is.read(reinterpret_cast<char *>(midi_data.data()),
+            static_cast<std::streamsize>(midi_data.size()));
     if (is.bad())
         throw xcept("std::ifstream::read bad");
     if (is.fail())
@@ -631,7 +632,7 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
     throw_assert(midi_data.at(6), 0, "Bad File Header chunk len");
     throw_assert(midi_data.at(7), 6, "Bad File Header chunk len");
 
-    uint16_t midi_type = static_cast<int16_t>(
+    uint16_t midi_type = static_cast<uint16_t>(
             (midi_data.at(8) << 8) | midi_data.at(9));
     if (midi_type > 2)
         throw xcept("Illegal MIDI file type: %u", midi_type);
@@ -717,7 +718,14 @@ void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
     }
 
     std::ofstream fout(file_path, std::ios::out | std::ios::binary);
-    fout.write(reinterpret_cast<char*>(data.data()), data.size());
+    if (!fout.is_open())
+        throw xcept("Error saving MIDI File: %s", strerror(errno));
+    fout.write(reinterpret_cast<char*>(data.data()),
+            static_cast<std::streamsize>(data.size()));
+    if (fout.bad())
+        throw xcept("std::ofstream::write bad");
+    if (fout.fail())
+        throw xcept("std::ofstream::write fail");
     fout.close();
 }
 
