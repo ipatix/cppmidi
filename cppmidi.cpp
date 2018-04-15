@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <cstdarg>
+#include <cassert>
 
 #include "cppmidi.h"
 
@@ -483,7 +484,10 @@ static void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_
             midi_data.at(fpos + 3));
 
     while (1) {
-        current_tick += read_vlv(midi_data, fpos);
+        uint64_t overflow_tick = current_tick + read_vlv(midi_data, fpos);
+        if (overflow_tick >= 0x100000000)
+            throw xcept("MIDI parser: Too many ticks for int32");
+        current_tick = static_cast<uint32_t>(overflow_tick);
         midi_event *ev = read_event(midi_data, fpos,
                 current_midi_channel, current_state, sysex_ongoing,
                 current_tick);
@@ -573,7 +577,10 @@ static void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_f
 
         while (1) {
             //printf("Parsing VLV at location 0x%zX\n", fpos);
-            current_tick += read_vlv(midi_data, fpos);
+            uint64_t overflow_tick = current_tick + read_vlv(midi_data, fpos);
+            if (overflow_tick >= 0x100000000)
+                throw xcept("MIDI parser: Too many ticks for int32");
+            current_tick = static_cast<uint32_t>(overflow_tick);
             //printf("Parsing Event at location 0x%zX\n", fpos);
             cppmidi::midi_event *ev = read_event(midi_data, fpos,
                     current_midi_channel, current_state, sysex_ongoing,
@@ -594,6 +601,7 @@ static void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_f
 void cppmidi::midi_file::load_from_file(const std::string& file_path) {
     // read file
     std::ifstream is(file_path, std::ios_base::binary);
+    // reading errno here is a bit hacky, but it does kinda work
     if (!is.is_open())
         throw xcept("Error loading MIDI File: %s", strerror(errno));
 
@@ -630,8 +638,10 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
     if (midi_type == 2)
         throw xcept("MIDI file type 2 is not supported");
 
-    this->time_division = static_cast<uint16_t>(
+    time_division = static_cast<uint16_t>(
             (midi_data.at(0xC) << 8) | midi_data.at(0xD));
+    if (time_division & 0x8000)
+        throw xcept("MIDI parser error: frames/second time division: unsupported");
 
     if (midi_type == 0)
         load_type_zero(midi_data, *this);
@@ -689,7 +699,7 @@ void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
             std::vector<uint8_t> ev_data = ev->event_data();
             if (ev->event_type() == ev_type::MetaEndOfTrack)
                 break;
-            uint32_t event_time = ev->absolute_ticks();
+            uint32_t event_time = ev->ticks;
             std::vector<uint8_t> vlv = len2vlv(event_time - last_event_time);
             last_event_time = event_time;
             data.insert(data.end(), vlv.begin(), vlv.end());
@@ -697,7 +707,7 @@ void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
         }
         data.insert(data.end(), zero_vlv.begin(), zero_vlv.end());
         data.insert(data.end(), eot_data.begin(), eot_data.end());
-        
+
         uint32_t track_end_pos = static_cast<uint32_t>(data.size());
         uint32_t track_len = track_end_pos - track_start_pos;
         data[track_len_pos + 0] = static_cast<uint8_t>(track_len >> 24);
@@ -717,9 +727,27 @@ void cppmidi::midi_file::sort_track_events() {
                 const std::unique_ptr<cppmidi::midi_event>& a,
                 const std::unique_ptr<cppmidi::midi_event>& b)
         {
-            return a->absolute_ticks() < b->absolute_ticks();
+            return a->ticks < b->ticks;
         };
         std::stable_sort(tr.midi_events.begin(), tr.midi_events.end(), cmp);
+    }
+}
+
+void cppmidi::midi_file::convert_time_division(uint16_t time_division) {
+    if (time_division & 0x8000)
+        throw xcept("Cannot convert time division to frames/second: unsupported");
+    // save a bit of processing time if time division is already the same
+    if (time_division == this->time_division)
+        return;
+    for (midi_track& trk : midi_tracks) {
+        for (std::unique_ptr<midi_event>& ev : trk.midi_events) {
+            uint64_t ticks = ev->ticks;
+            ticks *= time_division;
+            ticks /= this->time_division;
+            if (ticks >= 0x100000000)
+                throw xcept("Cannot convert time division: int32 tick overflow");
+            ev->ticks = static_cast<uint32_t>(ticks);
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <vector>
 #include <cstdint>
 #include <string>
@@ -55,14 +56,11 @@ namespace cppmidi {
 
     class midi_event {
     public:
-        uint32_t absolute_ticks() const {
-            return ticks;
-        }
         virtual std::vector<uint8_t> event_data() const = 0;
         virtual ev_type event_type() const = 0;
+        uint32_t ticks;
     protected:
         midi_event(uint32_t ticks) : ticks(ticks) {}
-        uint32_t ticks;
     };
 
     midi_event *read_event(const std::vector<uint8_t>& midi_data, size_t& fpos,
@@ -82,6 +80,7 @@ namespace cppmidi {
         void load_from_file(const std::string& file_path);
         void save_to_file(const std::string& file_path) const;
         void sort_track_events();
+        void convert_time_division(uint16_t time_division);
     };
 
     //=========================================================================
@@ -106,7 +105,13 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         uint8_t get_key() const { return key; }
+        void set_key(uint8_t key) {
+            this->key = static_cast<uint8_t>(key & 0x7F);
+        }
         uint8_t get_velocity() const { return velocity; }
+        void set_velocity(uint8_t velocity) {
+            this->velocity = static_cast<uint8_t>(velocity & 0x7F);
+        }
     private:
         uint8_t key, velocity;
     };
@@ -120,7 +125,13 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         uint8_t get_key() const { return key; }
+        void set_key(uint8_t key) {
+            this->key = static_cast<uint8_t>(key & 0x7F);
+        }
         uint8_t get_velocity() const { return velocity; }
+        void set_velocity(uint8_t velocity ) {
+            this->velocity = static_cast<uint8_t>(velocity & 0x7F);
+        }
     private:
         uint8_t key, velocity;
     };
@@ -134,7 +145,13 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         uint8_t get_key() const { return key; }
+        void set_key(uint8_t key) {
+            this->key = static_cast<uint8_t>(key & 0x7F);
+        }
         uint8_t get_value() const { return value; }
+        void set_value(uint8_t value) {
+            this->value = static_cast<uint8_t>(value & 0x7F);
+        }
     private:
         uint8_t key, value;
     };
@@ -148,7 +165,13 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         uint8_t get_controller() const { return controller; }
+        void set_controller(uint8_t controller) {
+            this->controller = static_cast<uint8_t>(controller & 0x7F);
+        }
         uint8_t get_value() const { return value; }
+        void set_value(uint8_t value) {
+            this->value = static_cast<uint8_t>(value & 0x7F);
+        }
     private:
         uint8_t controller, value;
     };
@@ -162,6 +185,9 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         uint8_t get_program() const { return program; }
+        void set_program(uint8_t program) {
+            this->program = static_cast<uint8_t>(program & 0x7F);
+        }
     private:
         uint8_t program;
     };
@@ -175,6 +201,9 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         uint8_t get_value() const { return value; }
+        void set_value(uint8_t value) {
+            this->value = static_cast<uint8_t>(value & 0x7F);
+        }
     private:
         uint8_t value;
     };
@@ -188,6 +217,9 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         int16_t get_pitch() const { return pitch; }
+        void set_pitch(int16_t pitch) {
+            this->pitch = std::max<int16_t>(-0x2000, std::min<int16_t>(0x1FFF, pitch));
+        }
     private:
         int16_t pitch;
     };
