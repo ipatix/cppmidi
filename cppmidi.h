@@ -69,6 +69,8 @@ namespace cppmidi {
 
     struct midi_track {
         std::vector<std::unique_ptr<midi_event>> midi_events;
+
+        void sort_events();
     };
 
     struct midi_file {
@@ -408,6 +410,7 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         ev_type event_type() const override;
         uint32_t get_us_per_beat() const { return us_per_beat; }
+        double get_bpm() const { return 1000000.0 * 60.0 / us_per_beat; }
     private:
         void errchk();
         uint32_t us_per_beat;

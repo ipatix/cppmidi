@@ -729,15 +729,19 @@ void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
     fout.close();
 }
 
+void cppmidi::midi_track::sort_events() {
+    auto cmp = [](
+            const std::unique_ptr<cppmidi::midi_event>& a,
+            const std::unique_ptr<cppmidi::midi_event>& b)
+    {
+        return a->ticks < b->ticks;
+    };
+    std::stable_sort(midi_events.begin(), midi_events.end(), cmp);
+}
+
 void cppmidi::midi_file::sort_track_events() {
     for (cppmidi::midi_track& tr : midi_tracks) {
-        auto cmp = [](
-                const std::unique_ptr<cppmidi::midi_event>& a,
-                const std::unique_ptr<cppmidi::midi_event>& b)
-        {
-            return a->ticks < b->ticks;
-        };
-        std::stable_sort(tr.midi_events.begin(), tr.midi_events.end(), cmp);
+        tr.sort_events();
     }
 }
 
