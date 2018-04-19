@@ -7,6 +7,89 @@
 #include <memory>
 #include <exception>
 
+#define MIDI_CC_MSB_BANK_SELECT 0
+#define MIDI_CC_MSB_MOD         1
+#define MIDI_CC_MSB_BREATH      2
+// #3 not defined
+#define MIDI_CC_MSB_FOOT        4
+#define MIDI_CC_MSB_PORT_TIME   5 // portamento time
+#define MIDI_CC_MSB_DATA_ENTRY  6
+#define MIDI_CC_MSB_VOLUME      7
+#define MIDI_CC_MSB_BALANCE     8
+// #9 not defined
+#define MIDI_CC_MSB_PAN         10
+#define MIDI_CC_MSB_EXPRESSION  11
+#define MIDI_CC_MSB_FX_CTRL_1   12
+#define MIDI_CC_MSB_FX_CTRL_2   13
+// #14..15 not defined
+#define MIDI_CC_MSB_GP_1        16 // general purpose 1..4
+#define MIDI_CC_MSB_GP_2        17
+#define MIDI_CC_MSB_GP_3        18
+#define MIDI_CC_MSB_GP_4        19
+// #20..31 not defined
+#define MIDI_CC_LSB_BANK_SELECT 32
+#define MIDI_CC_LSB_MOD         33
+#define MIDI_CC_LSB_BREATH      34
+// #35 not defined
+#define MIDI_CC_LSB_FOOT        36
+#define MIDI_CC_LSB_PORT_TIME   37
+#define MIDI_CC_LSB_DATA_ENTRY  38
+#define MIDI_CC_LSB_VOLUME      39
+#define MIDI_CC_LSB_BALANCE     40
+// #41 not defined
+#define MIDI_CC_LSB_PAN         42
+#define MIDI_CC_LSB_EXPRESSION  43
+#define MIDI_CC_LSB_FX_CTRL_1   44
+#define MIDI_CC_LSB_FX_CTRL_2   45
+// #46..47 not defined
+#define MIDI_CC_LSB_GP_1        48
+#define MIDI_CC_LSB_GP_2        49
+#define MIDI_CC_LSB_GP_3        50
+#define MIDI_CC_LSB_GP_4        51
+// #52..63 not defined
+#define MIDI_CC_SUSTAIN_PEDAL   64
+#define MIDI_CC_PORT_SWITCH     65 // portamento
+#define MIDI_CC_SOST_SWITCH     66 // sostenuto
+#define MIDI_CC_SOFT_PEDAL      67
+#define MIDI_CC_LEGATO_SWITCH   68
+#define MIDI_CC_HOLD2           69
+#define MIDI_CC_SND_CTRL_1      70
+#define MIDI_CC_SND_CTRL_2      71
+#define MIDI_CC_SND_CTRL_3      72
+#define MIDI_CC_SND_CTRL_4      73
+#define MIDI_CC_SND_CTRL_5      74
+#define MIDI_CC_SND_CTRL_6      75
+#define MIDI_CC_SND_CTRL_7      76
+#define MIDI_CC_SND_CTRL_8      77
+#define MIDI_CC_SND_CTRL_9      78
+#define MIDI_CC_SND_CTRL_10     79
+#define MIDI_CC_GP_SWITCH_1     80
+#define MIDI_CC_GP_SWITCH_2     81
+#define MIDI_CC_GP_SWITCH_3     82
+#define MIDI_CC_GP_SWITCH_4     83
+#define MIDI_CC_PORT_CTRL       84 // portamento
+// #85..90 not defined
+#define MIDI_CC_FX_DEPTH_1      91
+#define MIDI_CC_FX_DEPTH_2      92
+#define MIDI_CC_FX_DEPTH_3      93
+#define MIDI_CC_FX_DEPTH_4      94
+#define MIDI_CC_FX_DEPTH_5      95
+#define MIDI_CC_DATA_INC        96
+#define MIDI_CC_DATA_DEC        97
+#define MIDI_CC_LSB_NRPN        98
+#define MIDI_CC_MSB_NRPN        99
+#define MIDI_CC_LSB_RPN         100
+#define MIDI_CC_MSB_RPN         101
+// #102..119 not defined
+#define MIDI_CC_ALL_SOUND_OFF   120
+#define MIDI_CC_ALL_CTRL_RESET  121
+#define MIDI_CC_LOCAL_SWITCH    122
+#define MIDI_CC_ALL_NOTES_OFF   123
+#define MIDI_CC_OMNI_MODE_OFF   124
+#define MIDI_CC_OMNI_MODE_ON    125
+#define MIDI_CC_MONO_MODE       126
+#define MIDI_CC_POLY_MODE       127
+
 namespace cppmidi {
     std::vector<uint8_t> len2vlv(uint64_t len);
     uint32_t vlv2len(const std::vector<uint8_t>& vlv);
