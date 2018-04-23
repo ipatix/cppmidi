@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <fstream>
+#include <typeinfo>
 
 #include <cstring>
 #include <cstdarg>
@@ -497,46 +498,42 @@ static void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_
 
         uint8_t insert_track = 0;
 
-        switch (ev->event_type()) {
-        case ev_type::MsgNoteOff:
-        case ev_type::MsgNoteOn:
-        case ev_type::MsgNoteAftertouch:
-        case ev_type::MsgController:
-        case ev_type::MsgProgram:
-        case ev_type::MsgChannelAftertouch:
-        case ev_type::MsgPitchBend:
+        if (typeid(*ev) == typeid(noteoff_message_midi_event) ||
+                typeid(*ev) == typeid(noteon_message_midi_event) ||
+                typeid(*ev) == typeid(noteaftertouch_message_midi_event) ||
+                typeid(*ev) == typeid(controller_message_midi_event) ||
+                typeid(*ev) == typeid(program_message_midi_event) ||
+                typeid(*ev) == typeid(channelaftertouch_message_midi_event) ||
+                typeid(*ev) == typeid(pitchbend_message_midi_event)) {
             insert_track = static_cast
                 <cppmidi::message_midi_event*>
                 (ev)->channel() & 0xF;
-            break;
-        case ev_type::MetaSequenceNumber:
-        case ev_type::MetaText:
-        case ev_type::MetaCopyright:
-        case ev_type::MetaTrackName:
-        case ev_type::MetaInstrument:
-        case ev_type::MetaLyric:
-        case ev_type::MetaMarker:
-        case ev_type::MetaCuepoint:
-        case ev_type::MetaProgramName:
-        case ev_type::MetaDeviceName:
-        case ev_type::MetaMidiPort:
-        case ev_type::MetaEndOfTrack:
-        case ev_type::MetaSMPTE:
-        case ev_type::MetaTimeSignature:
-        case ev_type::MetaKeySignature:
-        case ev_type::MetaSequencerSpecific:
+        } else if (typeid(*ev) == typeid(sequencenumber_meta_midi_event) ||
+                typeid(*ev) == typeid(text_meta_midi_event) ||
+                typeid(*ev) == typeid(copyright_meta_midi_event) ||
+                typeid(*ev) == typeid(trackname_meta_midi_event) ||
+                typeid(*ev) == typeid(instrument_meta_midi_event) ||
+                typeid(*ev) == typeid(lyric_meta_midi_event) ||
+                typeid(*ev) == typeid(marker_meta_midi_event) ||
+                typeid(*ev) == typeid(cuepoint_meta_midi_event) ||
+                typeid(*ev) == typeid(program_message_midi_event) ||
+                typeid(*ev) == typeid(devicename_meta_midi_event) ||
+                typeid(*ev) == typeid(midiport_meta_midi_event) ||
+                typeid(*ev) == typeid(endoftrack_meta_midi_event) ||
+                typeid(*ev) == typeid(smpteoffset_meta_midi_event) ||
+                typeid(*ev) == typeid(timesignature_meta_midi_event) ||
+                typeid(*ev) == typeid(keysignature_meta_midi_event) ||
+                typeid(*ev) == typeid(sequencerspecific_meta_midi_event)) {
             insert_track = current_meta_track;
-            break;
-        case ev_type::MetaChannelPrefix:
+        } else if (typeid(*ev) == typeid(channelprefix_meta_midi_event)) {
             insert_track = current_meta_track = static_cast
                 <cppmidi::channelprefix_meta_midi_event*>
                 (ev)->get_channel() & 0xF;
-            break;
-        case ev_type::MetaTempo:
-        case ev_type::SysEx:
-        case ev_type::Escape:
+        } else if (typeid(*ev) == typeid(tempo_meta_midi_event) ||
+                typeid(*ev) == typeid(tempo_meta_midi_event) ||
+                typeid(*ev) == typeid(sysex_midi_event) ||
+                typeid(*ev) == typeid(escape_midi_event)) {
             insert_track = 0;
-            break;
         }
 
         mf.midi_tracks[insert_track].midi_events.emplace_back(ev);
@@ -698,7 +695,7 @@ void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
         uint32_t last_event_time = 0;
         for (const std::unique_ptr<midi_event>& ev : midi_tracks[trk].midi_events) {
             std::vector<uint8_t> ev_data = ev->event_data();
-            if (ev->event_type() == ev_type::MetaEndOfTrack)
+            if (typeid(*ev) == typeid(endoftrack_meta_midi_event))
                 break;
             uint32_t event_time = ev->ticks;
             std::vector<uint8_t> vlv = len2vlv(event_time - last_event_time);
@@ -773,19 +770,11 @@ std::vector<uint8_t> cppmidi::noteoff_message_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::noteoff_message_midi_event::event_type() const {
-    return ev_type::MsgNoteOff;
-}
-
 std::vector<uint8_t> cppmidi::noteon_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0x9 << 4)), key, velocity
     };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::noteon_message_midi_event::event_type() const {
-    return ev_type::MsgNoteOn;
 }
 
 std::vector<uint8_t> cppmidi::noteaftertouch_message_midi_event::event_data() const {
@@ -795,19 +784,11 @@ std::vector<uint8_t> cppmidi::noteaftertouch_message_midi_event::event_data() co
     return retval;
 }
 
-cppmidi::ev_type cppmidi::noteaftertouch_message_midi_event::event_type() const {
-    return ev_type::MsgNoteAftertouch;
-}
-
 std::vector<uint8_t> cppmidi::controller_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0xB << 4)), controller, value
     };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::controller_message_midi_event::event_type() const {
-    return ev_type::MsgController;
 }
 
 std::vector<uint8_t> cppmidi::program_message_midi_event::event_data() const {
@@ -817,19 +798,11 @@ std::vector<uint8_t> cppmidi::program_message_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::program_message_midi_event::event_type() const {
-    return ev_type::MsgProgram;
-}
-
 std::vector<uint8_t> cppmidi::channelaftertouch_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0xD << 4)), value
     };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::channelaftertouch_message_midi_event::event_type() const {
-    return ev_type::MsgChannelAftertouch;
 }
 
 std::vector<uint8_t> cppmidi::pitchbend_message_midi_event::event_data() const {
@@ -840,10 +813,6 @@ std::vector<uint8_t> cppmidi::pitchbend_message_midi_event::event_data() const {
         static_cast<uint8_t>((pitch_biased >> 7) & 0x7F)
     };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::pitchbend_message_midi_event::event_type() const {
-    return ev_type::MsgPitchBend;
 }
 
 //=============================================================================
@@ -864,10 +833,6 @@ std::vector<uint8_t> cppmidi::sequencenumber_meta_midi_event::event_data() const
     }
 }
 
-cppmidi::ev_type cppmidi::sequencenumber_meta_midi_event::event_type() const {
-    return ev_type::MetaSequenceNumber;
-}
-
 std::vector<uint8_t> cppmidi::text_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x01 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -876,10 +841,6 @@ std::vector<uint8_t> cppmidi::text_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
-}
-
-cppmidi::ev_type cppmidi::text_meta_midi_event::event_type() const {
-    return ev_type::MetaText;
 }
 
 std::vector<uint8_t> cppmidi::copyright_meta_midi_event::event_data() const {
@@ -892,10 +853,6 @@ std::vector<uint8_t> cppmidi::copyright_meta_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::copyright_meta_midi_event::event_type() const {
-    return ev_type::MetaCopyright;
-}
-
 std::vector<uint8_t> cppmidi::trackname_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x03 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -904,10 +861,6 @@ std::vector<uint8_t> cppmidi::trackname_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
-}
-
-cppmidi::ev_type cppmidi::trackname_meta_midi_event::event_type() const {
-    return ev_type::MetaTrackName;
 }
 
 std::vector<uint8_t> cppmidi::instrument_meta_midi_event::event_data() const {
@@ -920,10 +873,6 @@ std::vector<uint8_t> cppmidi::instrument_meta_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::instrument_meta_midi_event::event_type() const {
-    return ev_type::MetaInstrument;
-}
-
 std::vector<uint8_t> cppmidi::lyric_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x05 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -932,10 +881,6 @@ std::vector<uint8_t> cppmidi::lyric_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
-}
-
-cppmidi::ev_type cppmidi::lyric_meta_midi_event::event_type() const {
-    return ev_type::MetaLyric;
 }
 
 std::vector<uint8_t> cppmidi::marker_meta_midi_event::event_data() const {
@@ -948,10 +893,6 @@ std::vector<uint8_t> cppmidi::marker_meta_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::marker_meta_midi_event::event_type() const {
-    return ev_type::MetaMarker;
-}
-
 std::vector<uint8_t> cppmidi::cuepoint_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x07 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -960,10 +901,6 @@ std::vector<uint8_t> cppmidi::cuepoint_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
-}
-
-cppmidi::ev_type cppmidi::cuepoint_meta_midi_event::event_type() const {
-    return ev_type::MetaCuepoint;
 }
 
 std::vector<uint8_t> cppmidi::programname_meta_midi_event::event_data() const {
@@ -976,10 +913,6 @@ std::vector<uint8_t> cppmidi::programname_meta_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::programname_meta_midi_event::event_type() const {
-    return ev_type::MetaProgramName;
-}
-
 std::vector<uint8_t> cppmidi::devicename_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x09 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -990,17 +923,9 @@ std::vector<uint8_t> cppmidi::devicename_meta_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::devicename_meta_midi_event::event_type() const {
-    return ev_type::MetaDeviceName;
-}
-
 std::vector<uint8_t> cppmidi::channelprefix_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x20, 1, channel };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::channelprefix_meta_midi_event::event_type() const {
-    return ev_type::MetaChannelPrefix;
 }
 
 std::vector<uint8_t> cppmidi::midiport_meta_midi_event::event_data() const {
@@ -1008,17 +933,9 @@ std::vector<uint8_t> cppmidi::midiport_meta_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::midiport_meta_midi_event::event_type() const {
-    return ev_type::MetaMidiPort;
-}
-
 std::vector<uint8_t> cppmidi::endoftrack_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x2F, 0 };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::endoftrack_meta_midi_event::event_type() const {
-    return ev_type::MetaEndOfTrack;
 }
 
 std::vector<uint8_t> cppmidi::tempo_meta_midi_event::event_data() const {
@@ -1029,18 +946,10 @@ std::vector<uint8_t> cppmidi::tempo_meta_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::tempo_meta_midi_event::event_type() const {
-    return ev_type::MetaTempo;
-}
-
 std::vector<uint8_t> cppmidi::smpteoffset_meta_midi_event::event_data() const {
     uint8_t hr = static_cast<uint8_t>((frame_rate << 6) | hour);
     std::vector<uint8_t> retval = { 0xFF, 0x54, 5, hr, minute, second, frames, frame_fractions };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::smpteoffset_meta_midi_event::event_type() const {
-    return ev_type::MetaSMPTE;
 }
 
 void cppmidi::smpteoffset_meta_midi_event::errchk() {
@@ -1061,18 +970,10 @@ std::vector<uint8_t> cppmidi::timesignature_meta_midi_event::event_data() const 
     return retval;
 }
 
-cppmidi::ev_type cppmidi::timesignature_meta_midi_event::event_type() const {
-    return ev_type::MetaTimeSignature;
-}
-
 std::vector<uint8_t> cppmidi::keysignature_meta_midi_event::event_data() const {
     uint8_t sf = static_cast<uint8_t>(sharp_flats);
     std::vector<uint8_t> retval = { 0xFF, 0x59, 2, sf, _minor };
     return retval;
-}
-
-cppmidi::ev_type cppmidi::keysignature_meta_midi_event::event_type() const {
-    return ev_type::MetaKeySignature;
 }
 
 void cppmidi::keysignature_meta_midi_event::errchk() {
@@ -1086,10 +987,6 @@ std::vector<uint8_t> cppmidi::sequencerspecific_meta_midi_event::event_data() co
     retval.insert(retval.end(), vlv.begin(), vlv.end());
     retval.insert(retval.end(), data.begin(), data.end());
     return retval;
-}
-
-cppmidi::ev_type cppmidi::sequencerspecific_meta_midi_event::event_type() const {
-    return ev_type::MetaSequencerSpecific;
 }
 
 //=============================================================================
@@ -1106,20 +1003,12 @@ std::vector<uint8_t> cppmidi::sysex_midi_event::event_data() const {
     return retval;
 }
 
-cppmidi::ev_type cppmidi::sysex_midi_event::event_type() const {
-    return ev_type::SysEx;
-}
-
 std::vector<uint8_t> cppmidi::escape_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xF7 };
     std::vector<uint8_t> vlv = len2vlv(data.size());
     retval.insert(retval.end(), vlv.begin(), vlv.end());
     retval.insert(retval.end(), data.begin(), data.end());
     return retval;
-}
-
-cppmidi::ev_type cppmidi::escape_midi_event::event_type() const {
-    return ev_type::Escape;
 }
 
 //=============================================================================

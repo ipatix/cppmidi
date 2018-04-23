@@ -107,40 +107,9 @@ namespace cppmidi {
         PitchBend,
     };
 
-    enum class ev_type {
-        MsgNoteOff,
-        MsgNoteOn,
-        MsgNoteAftertouch,
-        MsgController,
-        MsgProgram,
-        MsgChannelAftertouch,
-        MsgPitchBend,
-        MetaSequenceNumber,
-        MetaText,
-        MetaCopyright,
-        MetaTrackName,
-        MetaInstrument,
-        MetaLyric,
-        MetaMarker,
-        MetaCuepoint,
-        MetaProgramName,
-        MetaDeviceName,
-        MetaChannelPrefix,
-        MetaMidiPort,
-        MetaEndOfTrack,
-        MetaTempo,
-        MetaSMPTE,
-        MetaTimeSignature,
-        MetaKeySignature,
-        MetaSequencerSpecific,
-        SysEx,
-        Escape,
-    };
-
     class midi_event {
     public:
         virtual std::vector<uint8_t> event_data() const = 0;
-        virtual ev_type event_type() const = 0;
         uint32_t ticks;
     protected:
         midi_event(uint32_t ticks) : ticks(ticks) {}
@@ -188,7 +157,6 @@ namespace cppmidi {
             : message_midi_event(ticks, midi_channel),
             key(key & 0x7F), velocity(velocity & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_key() const { return key; }
         void set_key(uint8_t key) {
             this->key = static_cast<uint8_t>(key & 0x7F);
@@ -208,7 +176,6 @@ namespace cppmidi {
             : message_midi_event(ticks, midi_channel),
             key(key & 0x7F), velocity(velocity & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_key() const { return key; }
         void set_key(uint8_t key) {
             this->key = static_cast<uint8_t>(key & 0x7F);
@@ -228,7 +195,6 @@ namespace cppmidi {
             : message_midi_event(ticks, midi_channel),
             key(key & 0x7F), value(value & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_key() const { return key; }
         void set_key(uint8_t key) {
             this->key = static_cast<uint8_t>(key & 0x7F);
@@ -248,7 +214,6 @@ namespace cppmidi {
             : message_midi_event(ticks, midi_channel),
             controller(controller & 0x7F), value(value & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_controller() const { return controller; }
         void set_controller(uint8_t controller) {
             this->controller = static_cast<uint8_t>(controller & 0x7F);
@@ -268,7 +233,6 @@ namespace cppmidi {
             : message_midi_event(ticks, midi_channel),
             program(program & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_program() const { return program; }
         void set_program(uint8_t program) {
             this->program = static_cast<uint8_t>(program & 0x7F);
@@ -284,7 +248,6 @@ namespace cppmidi {
             : message_midi_event(ticks, midi_channel),
             value(value & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_value() const { return value; }
         void set_value(uint8_t value) {
             this->value = static_cast<uint8_t>(value & 0x7F);
@@ -300,7 +263,6 @@ namespace cppmidi {
             : message_midi_event(ticks, midi_channel),
             pitch(pitch) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         int16_t get_pitch() const { return pitch; }
         void set_pitch(int16_t pitch) {
             this->pitch = std::max<int16_t>(-0x2000, std::min<int16_t>(0x1FFF, pitch));
@@ -326,7 +288,6 @@ namespace cppmidi {
         sequencenumber_meta_midi_event(uint32_t ticks)
             : meta_midi_event(ticks), seq_num(0), empty(true) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint16_t get_seq_num() const { return seq_num; }
         bool get_empty() const { return empty; }
     private:
@@ -341,7 +302,6 @@ namespace cppmidi {
         text_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -354,7 +314,6 @@ namespace cppmidi {
         copyright_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -367,7 +326,6 @@ namespace cppmidi {
         trackname_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -380,7 +338,6 @@ namespace cppmidi {
         instrument_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -393,7 +350,6 @@ namespace cppmidi {
         lyric_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -406,7 +362,6 @@ namespace cppmidi {
         marker_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -419,7 +374,6 @@ namespace cppmidi {
         cuepoint_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -432,7 +386,6 @@ namespace cppmidi {
         programname_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -445,7 +398,6 @@ namespace cppmidi {
         devicename_meta_midi_event(uint32_t ticks, std::string&& text)
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::string& get_text() const { return text; }
     private:
         std::string text;
@@ -456,7 +408,6 @@ namespace cppmidi {
         channelprefix_meta_midi_event(uint32_t ticks, uint8_t channel)
             : meta_midi_event(ticks), channel(channel & 0xF) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_channel() const { return channel; }
     private:
         uint8_t channel;
@@ -467,7 +418,6 @@ namespace cppmidi {
         midiport_meta_midi_event(uint32_t ticks, uint8_t port)
             : meta_midi_event(ticks), port(port & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_port() const { return port; }
     private:
         uint8_t port;
@@ -478,7 +428,6 @@ namespace cppmidi {
         endoftrack_meta_midi_event(uint32_t ticks)
             : meta_midi_event(ticks) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
     };
 
     class tempo_meta_midi_event : public meta_midi_event {
@@ -491,7 +440,6 @@ namespace cppmidi {
                 errchk();
             }
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint32_t get_us_per_beat() const { return us_per_beat; }
         double get_bpm() const { return 1000000.0 * 60.0 / us_per_beat; }
     private:
@@ -510,7 +458,6 @@ namespace cppmidi {
                 errchk();
             }
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_frame_rate() const { return frame_rate; }
         uint8_t get_hour() const { return hour; }
         uint8_t get_minute() const { return minute; }
@@ -533,7 +480,6 @@ namespace cppmidi {
             numerator(numerator), denominator(denominator),
             tick_clocks(tick_clocks), n32n(n32n) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         uint8_t get_numerator() const { return numerator; }
         uint8_t get_denominator() const { return denominator; }
         uint8_t get_tick_clocks() const { return tick_clocks; }
@@ -552,7 +498,6 @@ namespace cppmidi {
                 errchk();
             }
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         int8_t get_sharp_flats() const { return sharp_flats; }
         bool get_minor() const { return _minor; }
     private:
@@ -570,7 +515,6 @@ namespace cppmidi {
                 std::vector<uint8_t>&& data)
             : meta_midi_event(ticks), data(data) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::vector<uint8_t>& get_data() const { return data; }
     private:
         std::vector<uint8_t> data;
@@ -587,7 +531,6 @@ namespace cppmidi {
                 bool first_chunk)
             : midi_event(ticks), data(data), first_chunk(first_chunk) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::vector<uint8_t>& get_data() const { return data; }
         bool get_first_chunk() const { return first_chunk; }
     private:
@@ -602,7 +545,6 @@ namespace cppmidi {
         escape_midi_event(uint32_t ticks, std::vector<uint8_t>&& data)
             : midi_event(ticks), data(data) {}
         std::vector<uint8_t> event_data() const override;
-        ev_type event_type() const override;
         const std::vector<uint8_t>& get_data() const { return data; }
     private:
         std::vector<uint8_t> data;
