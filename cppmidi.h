@@ -121,6 +121,12 @@ namespace cppmidi {
 
     struct midi_track {
         std::vector<std::unique_ptr<midi_event>> midi_events;
+        const std::unique_ptr<midi_event>& operator[](size_t i) const {
+            return midi_events[i];
+        }
+        std::unique_ptr<midi_event>& operator[](size_t i) {
+            return midi_events[i];
+        }
 
         void sort_events();
     };
@@ -128,6 +134,12 @@ namespace cppmidi {
     struct midi_file {
         uint16_t time_division;
         std::vector<midi_track> midi_tracks;
+        const midi_track& operator[](size_t i) const {
+            return midi_tracks[i];
+        }
+        midi_track& operator[](size_t i) {
+            return midi_tracks[i];
+        }
 
         midi_file() : time_division(0) {}
 
