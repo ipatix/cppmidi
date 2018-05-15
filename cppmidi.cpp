@@ -765,6 +765,10 @@ void cppmidi::midi_file::convert_time_division(uint16_t time_division) {
 
 //=============================================================================
 
+std::vector<uint8_t> cppmidi::dummy_midi_event::event_data() const {
+    throw xcept("dummy events cannot be serialized");
+}
+
 std::vector<uint8_t> cppmidi::noteoff_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0x8 << 4)), key, velocity

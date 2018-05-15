@@ -151,6 +151,14 @@ namespace cppmidi {
 
     //=========================================================================
 
+    // The dummy event is nothing specified by midi.
+    // It's intended to be used by the user program only
+    class dummy_midi_event : public midi_event {
+    public:
+        dummy_midi_event(uint32_t ticks) : midi_event(ticks) {}
+        std::vector<uint8_t> event_data() const override;
+    };
+
     class message_midi_event : public midi_event {
     public:
         uint8_t channel() const { return midi_channel; }
@@ -490,7 +498,9 @@ namespace cppmidi {
                 uint8_t tick_clocks, uint8_t n32n)
             : meta_midi_event(ticks),
             numerator(numerator), denominator(denominator),
-            tick_clocks(tick_clocks), n32n(n32n) {}
+            tick_clocks(tick_clocks), n32n(n32n) {
+                errchk();
+            }
         std::vector<uint8_t> event_data() const override;
         uint8_t get_numerator() const { return numerator; }
         uint8_t get_denominator() const { return denominator; }
