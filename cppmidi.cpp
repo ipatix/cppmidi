@@ -640,6 +640,8 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
             (midi_data.at(0xC) << 8) | midi_data.at(0xD));
     if (time_division & 0x8000)
         throw xcept("MIDI parser error: frames/second time division: unsupported");
+    if (time_division == 0)
+        throw xcept("MIDI parser error: time division is zero");
 
     if (midi_type == 0)
         load_type_zero(midi_data, *this);
@@ -970,6 +972,11 @@ std::vector<uint8_t> cppmidi::timesignature_meta_midi_event::event_data() const 
     return retval;
 }
 
+void cppmidi::timesignature_meta_midi_event::errchk() {
+    if (denominator == 0)
+        throw xcept("Time Signature: Denominator is Zero");
+}
+
 std::vector<uint8_t> cppmidi::keysignature_meta_midi_event::event_data() const {
     uint8_t sf = static_cast<uint8_t>(sharp_flats);
     std::vector<uint8_t> retval = { 0xFF, 0x59, 2, sf, _minor };
@@ -978,7 +985,7 @@ std::vector<uint8_t> cppmidi::keysignature_meta_midi_event::event_data() const {
 
 void cppmidi::keysignature_meta_midi_event::errchk() {
     if (sharp_flats < -7 || sharp_flats > 7)
-        throw xcept("Time Signature: Invalid n# of sharps");
+        throw xcept("Key Signature: Invalid n# of sharps");
 }
 
 std::vector<uint8_t> cppmidi::sequencerspecific_meta_midi_event::event_data() const {
