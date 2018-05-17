@@ -141,7 +141,7 @@ namespace cppmidi {
             return midi_tracks[i];
         }
 
-        midi_file() : time_division(0) {}
+        midi_file() : time_division(48) {}
 
         void load_from_file(const std::string& file_path);
         void save_to_file(const std::string& file_path) const;
