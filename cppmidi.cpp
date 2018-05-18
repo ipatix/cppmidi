@@ -976,11 +976,6 @@ std::vector<uint8_t> cppmidi::timesignature_meta_midi_event::event_data() const 
     return retval;
 }
 
-void cppmidi::timesignature_meta_midi_event::errchk() {
-    if (denominator == 0)
-        throw xcept("Time Signature: Denominator is Zero");
-}
-
 std::vector<uint8_t> cppmidi::keysignature_meta_midi_event::event_data() const {
     uint8_t sf = static_cast<uint8_t>(sharp_flats);
     std::vector<uint8_t> retval = { 0xFF, 0x59, 2, sf, _minor };

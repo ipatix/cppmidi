@@ -498,16 +498,13 @@ namespace cppmidi {
                 uint8_t tick_clocks, uint8_t n32n)
             : meta_midi_event(ticks),
             numerator(numerator), denominator(denominator),
-            tick_clocks(tick_clocks), n32n(n32n) {
-                errchk();
-            }
+            tick_clocks(tick_clocks), n32n(n32n) {}
         std::vector<uint8_t> event_data() const override;
         uint8_t get_numerator() const { return numerator; }
         uint8_t get_denominator() const { return denominator; }
         uint8_t get_tick_clocks() const { return tick_clocks; }
         uint8_t get_n32n() const { return n32n; }
     private:
-        void errchk();
         uint8_t numerator, denominator;
         uint8_t tick_clocks, n32n;
     };
