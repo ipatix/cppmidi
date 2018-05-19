@@ -164,10 +164,13 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
         break;
     case 0xE:
         // parse pitch bend
-        retval = new pitchbend_message_midi_event(
-                    current_tick, ev_ch, static_cast<int16_t>(
-                        ((midi_data.at(fpos + 0) & 0x7F) << 7) |
-                        (midi_data.at(fpos + 1) & 0x7F)));
+        {
+            int pitch = (midi_data.at(fpos + 0) & 0x7F) |
+                ((midi_data.at(fpos + 1) & 0x7F) << 7);
+            pitch -= 0x2000;
+            retval = new pitchbend_message_midi_event(
+                    current_tick, ev_ch, static_cast<int16_t>(pitch));
+        }
         fpos += 2;
         current_midi_channel = ev_ch;
         current_rs = running_state::PitchBend;
