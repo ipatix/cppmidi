@@ -469,7 +469,6 @@ static void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_
         mf.midi_tracks.emplace_back();
     }
 
-    size_t track_start = fpos;
     uint32_t current_tick = 0;
     uint8_t current_midi_channel = 0;
     uint8_t current_meta_track = 0;
@@ -486,6 +485,8 @@ static void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_
             (midi_data.at(fpos + 1) << 16) |
             (midi_data.at(fpos + 2) << 8) |
             midi_data.at(fpos + 3));
+    fpos += 4;
+    size_t track_start = fpos;
 
     while (1) {
         uint64_t overflow_tick = current_tick + read_vlv(midi_data, fpos);
