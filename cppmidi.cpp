@@ -544,7 +544,7 @@ static void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_
     }
 
     if (track_start + track_length != fpos) {
-        throw xcept("MIDI Type 1 error: Incorrect Track Length for track %u "
+        throw xcept("MIDI Type 0 error: Incorrect Track Length"
                 ", track data ends at 0x%X", fpos);
     }
 }
