@@ -436,8 +436,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
             break;
         case running_state::PitchBend:
             {
-                int16_t pitch = static_cast<int16_t>(midi_data.at(fpos++) & 0x7F);
-                pitch = static_cast<int16_t>(pitch | ((midi_data.at(fpos++) & 0x7F) << 7));
+                int16_t pitch = static_cast<int16_t>(cmd | ((midi_data.at(fpos++) & 0x7F) << 7));
                 // midi data is unsigned, parse as signed, subtract bias
                 pitch = static_cast<int16_t>(pitch - 0x2000);
                 retval = new pitchbend_message_midi_event(current_tick, current_midi_channel,
