@@ -30,3 +30,8 @@
 *.exe
 *.out
 *.app
+
+# example binaries
+examples/midi_read_write
+examples/write_notes
+examples/write_notes.mid
