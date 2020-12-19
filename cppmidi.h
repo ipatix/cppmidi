@@ -91,6 +91,39 @@
 #define MIDI_CC_POLY_MODE       127
 
 namespace cppmidi {
+    //=========================================================================
+
+    class visitor;
+    class dummy_midi_event;
+    class noteoff_message_midi_event;
+    class noteon_message_midi_event;
+    class noteaftertouch_message_midi_event;
+    class controller_message_midi_event;
+    class program_message_midi_event;
+    class channelaftertouch_message_midi_event;
+    class pitchbend_message_midi_event;
+    class sequencenumber_meta_midi_event;
+    class text_meta_midi_event;
+    class copyright_meta_midi_event;
+    class trackname_meta_midi_event;
+    class instrument_meta_midi_event;
+    class lyric_meta_midi_event;
+    class marker_meta_midi_event;
+    class cuepoint_meta_midi_event;
+    class programname_meta_midi_event;
+    class devicename_meta_midi_event;
+    class channelprefix_meta_midi_event;
+    class midiport_meta_midi_event;
+    class endoftrack_meta_midi_event;
+    class tempo_meta_midi_event;
+    class smpteoffset_meta_midi_event;
+    class timesignature_meta_midi_event;
+    class keysignature_meta_midi_event;
+    class sequencerspecific_meta_midi_event;
+    class sysex_midi_event;
+    class escape_midi_event;
+
+    //=========================================================================
     std::vector<uint8_t> len2vlv(uint64_t len);
     uint32_t vlv2len(const std::vector<uint8_t>& vlv);
 
@@ -111,6 +144,8 @@ namespace cppmidi {
     public:
         virtual std::vector<uint8_t> event_data() const = 0;
         uint32_t ticks;
+
+        virtual void accept(visitor& v) = 0;
     protected:
         midi_event(uint32_t ticks) : ticks(ticks) {}
     };
@@ -151,12 +186,57 @@ namespace cppmidi {
 
     //=========================================================================
 
+    class visitor {
+    public:
+        void visit(midi_track& mtrk) {
+            for (auto& mevt : mtrk.midi_events) {
+                mevt->accept(*this);
+            }
+        }
+        void visit(midi_file& mf) {
+            for (auto& mtrk : mf.midi_tracks) {
+                visit(mtrk);
+            }
+        }
+        virtual void visit(dummy_midi_event&) {}
+        virtual void visit(noteoff_message_midi_event&) {}
+        virtual void visit(noteon_message_midi_event&) {}
+        virtual void visit(noteaftertouch_message_midi_event&) {}
+        virtual void visit(controller_message_midi_event&) {}
+        virtual void visit(program_message_midi_event&) {}
+        virtual void visit(channelaftertouch_message_midi_event&) {}
+        virtual void visit(pitchbend_message_midi_event&) {}
+        virtual void visit(sequencenumber_meta_midi_event&) {}
+        virtual void visit(text_meta_midi_event&) {}
+        virtual void visit(copyright_meta_midi_event&) {}
+        virtual void visit(trackname_meta_midi_event&) {}
+        virtual void visit(instrument_meta_midi_event&) {}
+        virtual void visit(lyric_meta_midi_event&) {}
+        virtual void visit(marker_meta_midi_event&) {}
+        virtual void visit(cuepoint_meta_midi_event&) {}
+        virtual void visit(programname_meta_midi_event&) {}
+        virtual void visit(devicename_meta_midi_event&) {}
+        virtual void visit(channelprefix_meta_midi_event&) {}
+        virtual void visit(midiport_meta_midi_event&) {}
+        virtual void visit(endoftrack_meta_midi_event&) {}
+        virtual void visit(tempo_meta_midi_event&) {}
+        virtual void visit(smpteoffset_meta_midi_event&) {}
+        virtual void visit(timesignature_meta_midi_event&) {}
+        virtual void visit(keysignature_meta_midi_event&) {}
+        virtual void visit(sequencerspecific_meta_midi_event&) {}
+        virtual void visit(sysex_midi_event&) {}
+        virtual void visit(escape_midi_event&) {}
+    };
+
+    //=========================================================================
+
     // The dummy event is nothing specified by midi.
     // It's intended to be used by the user program only
     class dummy_midi_event : public midi_event {
     public:
         dummy_midi_event(uint32_t ticks) : midi_event(ticks) {}
         std::vector<uint8_t> event_data() const override;
+        void accept(visitor& v) override { v.visit(*this); }
     };
 
     class message_midi_event : public midi_event {
@@ -185,6 +265,7 @@ namespace cppmidi {
         void set_velocity(uint8_t velocity) {
             this->velocity = static_cast<uint8_t>(velocity & 0x7F);
         }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t key, velocity;
     };
@@ -204,6 +285,7 @@ namespace cppmidi {
         void set_velocity(uint8_t velocity ) {
             this->velocity = static_cast<uint8_t>(velocity & 0x7F);
         }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t key, velocity;
     };
@@ -223,6 +305,7 @@ namespace cppmidi {
         void set_value(uint8_t value) {
             this->value = static_cast<uint8_t>(value & 0x7F);
         }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t key, value;
     };
@@ -242,6 +325,7 @@ namespace cppmidi {
         void set_value(uint8_t value) {
             this->value = static_cast<uint8_t>(value & 0x7F);
         }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t controller, value;
     };
@@ -257,6 +341,7 @@ namespace cppmidi {
         void set_program(uint8_t program) {
             this->program = static_cast<uint8_t>(program & 0x7F);
         }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t program;
     };
@@ -272,6 +357,7 @@ namespace cppmidi {
         void set_value(uint8_t value) {
             this->value = static_cast<uint8_t>(value & 0x7F);
         }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t value;
     };
@@ -287,6 +373,7 @@ namespace cppmidi {
         void set_pitch(int16_t pitch) {
             this->pitch = std::max<int16_t>(-0x2000, std::min<int16_t>(0x1FFF, pitch));
         }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         int16_t pitch;
     };
@@ -310,6 +397,7 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         uint16_t get_seq_num() const { return seq_num; }
         bool get_empty() const { return empty; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint16_t seq_num;
         bool empty;
@@ -323,6 +411,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -335,6 +424,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -347,6 +437,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -359,6 +450,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -371,6 +463,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -383,6 +476,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -395,6 +489,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -407,6 +502,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -419,6 +515,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), text(text) {}
         std::vector<uint8_t> event_data() const override;
         const std::string& get_text() const { return text; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::string text;
     };
@@ -429,6 +526,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), channel(channel & 0xF) {}
         std::vector<uint8_t> event_data() const override;
         uint8_t get_channel() const { return channel; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t channel;
     };
@@ -439,6 +537,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), port(port & 0x7F) {}
         std::vector<uint8_t> event_data() const override;
         uint8_t get_port() const { return port; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t port;
     };
@@ -448,6 +547,7 @@ namespace cppmidi {
         endoftrack_meta_midi_event(uint32_t ticks)
             : meta_midi_event(ticks) {}
         std::vector<uint8_t> event_data() const override;
+        void accept(visitor& v) override { v.visit(*this); }
     };
 
     class tempo_meta_midi_event : public meta_midi_event {
@@ -462,6 +562,7 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         uint32_t get_us_per_beat() const { return us_per_beat; }
         double get_bpm() const { return 1000000.0 * 60.0 / us_per_beat; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         void errchk();
         uint32_t us_per_beat;
@@ -484,6 +585,7 @@ namespace cppmidi {
         uint8_t get_second() const { return second; }
         uint8_t get_frames() const { return frames; }
         uint8_t get_frame_fractions() const { return frame_fractions; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         void errchk();
         uint8_t frame_rate;
@@ -504,6 +606,7 @@ namespace cppmidi {
         uint8_t get_denominator() const { return denominator; }
         uint8_t get_tick_clocks() const { return tick_clocks; }
         uint8_t get_n32n() const { return n32n; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         uint8_t numerator, denominator;
         uint8_t tick_clocks, n32n;
@@ -519,6 +622,7 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         int8_t get_sharp_flats() const { return sharp_flats; }
         bool get_minor() const { return _minor; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         void errchk();
         int8_t sharp_flats;
@@ -535,6 +639,7 @@ namespace cppmidi {
             : meta_midi_event(ticks), data(data) {}
         std::vector<uint8_t> event_data() const override;
         const std::vector<uint8_t>& get_data() const { return data; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::vector<uint8_t> data;
     };
@@ -552,6 +657,7 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         const std::vector<uint8_t>& get_data() const { return data; }
         bool get_first_chunk() const { return first_chunk; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::vector<uint8_t> data;
         bool first_chunk;
@@ -565,6 +671,7 @@ namespace cppmidi {
             : midi_event(ticks), data(data) {}
         std::vector<uint8_t> event_data() const override;
         const std::vector<uint8_t>& get_data() const { return data; }
+        void accept(visitor& v) override { v.visit(*this); }
     private:
         std::vector<uint8_t> data;
     };
