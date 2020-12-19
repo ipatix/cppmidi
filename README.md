@@ -1,7 +1,8 @@
 # cppmidi
 This is a library to parse and save MIDI files. It's supposed to be a lightweight straight forward and easy to use library.
-The goal is the same as my "csmidi" library: To provide a very basic MIDI parsing/saving library without a lot of features with the intention to make it very easy to use without documentation.
+The goal is oo provide a very basic MIDI parsing/saving library without a lot of features with the intention to make it very easy to use
+and without having to dig through pages of documentation.
 
-In it's current state I didn't really do a lot of testing yet and it therefore there will probably be a few bugs I'm not aware of.
+At the moment, documentation is not yet available, but there are example programs in `examples` which may be helpful if you have not used this library before.
 
 THIS LIBRARY CANNOT DO MIDI PORT I/O. It's useful only for parsing and saving MIDI files.
