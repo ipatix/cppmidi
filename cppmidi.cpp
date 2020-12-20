@@ -598,7 +598,7 @@ static void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_f
     }
 }
 
-void cppmidi::midi_file::load_from_file(const std::string& file_path) {
+void cppmidi::midi_file::load_from_file(const std::filesystem::path& file_path) {
     // read file
     std::ifstream is(file_path, std::ios_base::binary);
     // reading errno here is a bit hacky, but it does kinda work
@@ -652,7 +652,7 @@ void cppmidi::midi_file::load_from_file(const std::string& file_path) {
         load_type_one(midi_data, *this);
 }
 
-void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
+void cppmidi::midi_file::save_to_file(const std::filesystem::path& file_path) const {
     std::vector<uint8_t> data;
     // file magic
     data.push_back(static_cast<uint8_t>('M'));

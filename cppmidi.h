@@ -6,6 +6,7 @@
 #include <string>
 #include <memory>
 #include <exception>
+#include <filesystem>
 
 #define MIDI_CC_MSB_BANK_SELECT 0
 #define MIDI_CC_MSB_MOD         1
@@ -189,8 +190,8 @@ namespace cppmidi {
 
         midi_file() : time_division(48) {}
 
-        void load_from_file(const std::string& file_path);
-        void save_to_file(const std::string& file_path) const;
+        void load_from_file(const std::filesystem::path& file_path);
+        void save_to_file(const std::filesystem::path& file_path) const;
         void sort_track_events();
         void convert_time_division(uint16_t time_division);
     };
