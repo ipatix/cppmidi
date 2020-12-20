@@ -308,8 +308,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                     throw xcept("MIDI parser error: Invalid SMPTE Offset "
                             "at 0x%X", fpos);
                 } else {
-                    uint8_t frame_rate = static_cast<uint8_t>(midi_data[fpos] >> 6);
-                    uint8_t hour = static_cast<uint8_t>(midi_data[fpos++] & 0x3F);
+                    uint8_t frame_rate = static_cast<uint8_t>((midi_data[fpos] >> 6) & 0b11);
+                    uint8_t hour = static_cast<uint8_t>(midi_data[fpos++] & 0b11111);
                     uint8_t minute = midi_data[fpos++];
                     uint8_t second = midi_data[fpos++];
                     uint8_t frames = midi_data[fpos++];
