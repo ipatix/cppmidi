@@ -142,6 +142,7 @@ namespace cppmidi {
 
     class midi_event {
     public:
+        virtual ~midi_event() = default;
         virtual std::vector<uint8_t> event_data() const = 0;
         uint32_t ticks;
 
@@ -381,6 +382,8 @@ namespace cppmidi {
     //=========================================================================
 
     class meta_midi_event : public midi_event {
+    public:
+        virtual ~meta_midi_event() = default;
     protected:
         meta_midi_event(uint32_t ticks)
             : midi_event(ticks) {}
