@@ -671,11 +671,11 @@ void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
     data.push_back(1);
 
     // num tracks
-    data.push_back(static_cast<uint8_t>(midi_tracks.size() << 8));
+    data.push_back(static_cast<uint8_t>(midi_tracks.size() >> 8));
     data.push_back(static_cast<uint8_t>(midi_tracks.size()));
 
     // time division
-    data.push_back(static_cast<uint8_t>(time_division << 8));
+    data.push_back(static_cast<uint8_t>(time_division >> 8));
     data.push_back(static_cast<uint8_t>(time_division));
 
     std::vector<uint8_t> zero_vlv = len2vlv(0);
