@@ -698,7 +698,7 @@ void cppmidi::midi_file::save_to_file(const std::string& file_path) const {
         // event data
         uint32_t track_start_pos = static_cast<uint32_t>(data.size());
         uint32_t last_event_time = 0;
-        for (const std::unique_ptr<midi_event>& ev : midi_tracks[trk].midi_events) {
+        for (const auto& ev : midi_tracks[trk]) {
             std::vector<uint8_t> ev_data = ev->event_data();
             if (typeid(*ev) == typeid(endoftrack_meta_midi_event))
                 break;
@@ -750,11 +750,13 @@ void cppmidi::midi_file::sort_track_events() {
 void cppmidi::midi_file::convert_time_division(uint16_t time_division) {
     if (time_division & 0x8000)
         throw xcept("Cannot convert time division to frames/second: unsupported");
+
     // save a bit of processing time if time division is already the same
     if (time_division == this->time_division)
         return;
+
     for (midi_track& trk : midi_tracks) {
-        for (std::unique_ptr<midi_event>& ev : trk.midi_events) {
+        for (auto& ev : trk.midi_events) {
             uint64_t ticks = ev->ticks;
             ticks *= time_division;
             ticks /= this->time_division;
