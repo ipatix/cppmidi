@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
      * - on channel #0 (cppmidi indexes MIDI channels from 0 to 15)
      * - with MIDI key #64 (G3)
      * - with note velocity #127 */
-    mf[0].midi_events.emplace_back(new noteon_message_midi_event(8, 0, 64, 127));
+    mf[0].midi_events.emplace_back(new noteon_message_midi_event(8, 0, 67, 127));
 
     /* Create a Note Off event:
      * - at time (in ticks) #24
