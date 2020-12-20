@@ -3,5 +3,5 @@
 set -eu
 
 for file in *.cpp; do
-    g++ -Wall -Wextra -O2 ../cppmidi.cpp -I .. $file -o ${file%.cpp}
+    g++ -std=c++17 -Wall -Wextra -g -Og ../cppmidi.cpp -I .. $file -o ${file%.cpp}
 done
