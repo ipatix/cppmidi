@@ -227,6 +227,8 @@ namespace cppmidi {
         virtual void visit(sequencerspecific_meta_midi_event&) {}
         virtual void visit(sysex_midi_event&) {}
         virtual void visit(escape_midi_event&) {}
+    protected:
+        visitor() = default;
     };
 
     //=========================================================================
