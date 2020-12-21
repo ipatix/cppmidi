@@ -385,7 +385,7 @@ namespace cppmidi {
         std::vector<uint8_t> event_data() const override;
         int16_t get_pitch() const { return pitch; }
         void set_pitch(int16_t pitch) {
-            this->pitch = std::max<int16_t>(-0x2000, std::min<int16_t>(0x1FFF, pitch));
+            this->pitch = std::clamp<int16_t>(pitch, -0x2000, 0x1FFF);
         }
         void accept(visitor& v) override { v.visit(*this); }
     private:
