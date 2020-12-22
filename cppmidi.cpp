@@ -118,10 +118,17 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
         break;
     case 0x9:
         // parse note on
-        retval = new noteon_message_midi_event(
-                    current_tick, ev_ch,
-                    midi_data.at(fpos + 0),
-                    midi_data.at(fpos + 1));
+        if (midi_data.at(fpos + 1) == 0) {
+            retval = new noteoff_message_midi_event(
+                        current_tick, ev_ch,
+                        midi_data.at(fpos + 0),
+                        midi_data.at(fpos + 1));
+        } else {
+            retval = new noteon_message_midi_event(
+                        current_tick, ev_ch,
+                        midi_data.at(fpos + 0),
+                        midi_data.at(fpos + 1));
+        }
         fpos += 2;
         current_midi_channel = ev_ch;
         current_rs = running_state::NoteOn;
