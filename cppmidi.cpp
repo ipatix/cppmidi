@@ -613,7 +613,7 @@ void cppmidi::midi_file::load_from_file(const std::filesystem::path& file_path) 
         throw xcept("Error loading MIDI File: %s", strerror(errno));
 
     is.seekg(0, std::ios_base::end);
-    long size = is.tellg();
+    std::streampos size = is.tellg();
     is.seekg(0, std::ios_base::beg);
     if (size < 0)
         throw xcept("Failed to obtain file size: %s", strerror(errno));
