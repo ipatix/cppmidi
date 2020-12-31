@@ -152,8 +152,8 @@ namespace cppmidi {
         midi_event(uint32_t ticks) : ticks(ticks) {}
     };
 
-    midi_event *read_event(const std::vector<uint8_t>& midi_data, size_t& fpos,
-            uint8_t& current_midi_channel, running_state& current_rs,
+    std::unique_ptr<midi_event> read_event(const std::vector<uint8_t>& midi_data,
+            size_t& fpos, uint8_t& current_midi_channel, running_state& current_rs,
             bool& sysex_ongoing, uint32_t current_tick);
 
     struct midi_track {

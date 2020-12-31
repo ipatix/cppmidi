@@ -96,11 +96,12 @@ uint32_t cppmidi::read_vlv(const std::vector<uint8_t>& midi_data, size_t& fpos) 
     return retval;
 }
 
-cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
+std::unique_ptr<cppmidi::midi_event> cppmidi::read_event(
+        const std::vector<uint8_t>& midi_data,
         size_t& fpos, uint8_t& current_midi_channel, running_state& current_rs,
         bool& sysex_ongoing, uint32_t current_tick) {
-    // this logic parses one midi event
-    midi_event *retval = nullptr;
+    // this function parses one midi event
+    std::unique_ptr<midi_event> retval;
     uint8_t cmd = midi_data.at(fpos++);
     uint8_t ev_type = static_cast<uint8_t>(cmd >> 4);
     uint8_t ev_ch = static_cast<uint8_t>(cmd & 0xF);
@@ -108,7 +109,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
     switch (ev_type) {
     case 0x8:
         // parse note off
-        retval = new noteoff_message_midi_event(
+        retval = std::make_unique<noteoff_message_midi_event>(
                     current_tick, ev_ch,
                     midi_data.at(fpos + 0),
                     midi_data.at(fpos + 1));
@@ -119,12 +120,12 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
     case 0x9:
         // parse note on
         if (midi_data.at(fpos + 1) == 0) {
-            retval = new noteoff_message_midi_event(
+            retval = std::make_unique<noteoff_message_midi_event>(
                         current_tick, ev_ch,
                         midi_data.at(fpos + 0),
                         midi_data.at(fpos + 1));
         } else {
-            retval = new noteon_message_midi_event(
+            retval = std::make_unique<noteon_message_midi_event>(
                         current_tick, ev_ch,
                         midi_data.at(fpos + 0),
                         midi_data.at(fpos + 1));
@@ -135,7 +136,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
         break;
     case 0xA:
         // parse note aftertouch
-        retval = new noteaftertouch_message_midi_event(
+        retval = std::make_unique<noteaftertouch_message_midi_event>(
                     current_tick, ev_ch,
                     midi_data.at(fpos + 0),
                     midi_data.at(fpos + 1));
@@ -145,7 +146,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
         break;
     case 0xB:
         // parse controller
-        retval = new controller_message_midi_event(
+        retval = std::make_unique<controller_message_midi_event>(
                     current_tick, ev_ch,
                     midi_data.at(fpos),
                     midi_data.at(fpos + 1));
@@ -155,7 +156,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
         break;
     case 0xC:
         // parse program change
-        retval = new program_message_midi_event(
+        retval = std::make_unique<program_message_midi_event>(
                     current_tick, ev_ch,
                     midi_data.at(fpos++));
         current_midi_channel = ev_ch;
@@ -163,7 +164,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
         break;
     case 0xD:
         // parse channel aftertouch
-        retval = new channelaftertouch_message_midi_event(
+        retval = std::make_unique<channelaftertouch_message_midi_event>(
                     current_tick, ev_ch,
                     midi_data.at(fpos++));
         current_midi_channel = ev_ch;
@@ -175,7 +176,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
             int pitch = (midi_data.at(fpos + 0) & 0x7F) |
                 ((midi_data.at(fpos + 1) & 0x7F) << 7);
             pitch -= 0x2000;
-            retval = new pitchbend_message_midi_event(
+            retval = std::make_unique<pitchbend_message_midi_event>(
                     current_tick, ev_ch, static_cast<int16_t>(pitch));
         }
         fpos += 2;
@@ -197,13 +198,13 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
             switch (type) {
             case 0x0:
                 if (len == 0) {
-                    retval = new sequencenumber_meta_midi_event(current_tick);
+                    retval = std::make_unique<sequencenumber_meta_midi_event>(current_tick);
                 } else if (len == 2) {
                     uint16_t seq_num = static_cast<uint16_t>(
                             (midi_data[fpos + 0] << 8) |
                             midi_data[fpos + 1]);
                     fpos += 2;
-                    retval = new sequencenumber_meta_midi_event(current_tick, seq_num);
+                    retval = std::make_unique<sequencenumber_meta_midi_event>(current_tick, seq_num);
                 } else {
                     throw xcept("MIDI parser error: Invalid sequence number format "
                             "at 0x%X", fpos);
@@ -213,7 +214,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string text(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new text_meta_midi_event(current_tick, std::move(text));
+                    retval = std::make_unique<text_meta_midi_event>(current_tick,
+                            std::move(text));
                     fpos += len;
                 }
                 break;
@@ -221,7 +223,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string copyright(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new copyright_meta_midi_event(current_tick, std::move(copyright));
+                    retval = std::make_unique<copyright_meta_midi_event>(current_tick,
+                            std::move(copyright));
                     fpos += len;
                 }
                 break;
@@ -229,7 +232,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string trackname(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new trackname_meta_midi_event(current_tick, std::move(trackname));
+                    retval = std::make_unique<trackname_meta_midi_event>(current_tick,
+                            std::move(trackname));
                     fpos += len;
                 }
                 break;
@@ -237,7 +241,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string instrument(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new instrument_meta_midi_event(current_tick, std::move(instrument));
+                    retval = std::make_unique<instrument_meta_midi_event>(current_tick,
+                            std::move(instrument));
                     fpos += len;
                 }
                 break;
@@ -245,7 +250,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string lyric(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new lyric_meta_midi_event(current_tick, std::move(lyric));
+                    retval = std::make_unique<lyric_meta_midi_event>(current_tick,
+                            std::move(lyric));
                     fpos += len;
                 }
                 break;
@@ -253,7 +259,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string marker(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new marker_meta_midi_event(current_tick, std::move(marker));
+                    retval = std::make_unique<marker_meta_midi_event>(current_tick,
+                            std::move(marker));
                     fpos += len;
                 }
                 break;
@@ -261,7 +268,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string cuepoint(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new cuepoint_meta_midi_event(current_tick, std::move(cuepoint));
+                    retval = std::make_unique<cuepoint_meta_midi_event>(current_tick,
+                            std::move(cuepoint));
                     fpos += len;
                 }
                 break;
@@ -269,7 +277,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string programname(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new programname_meta_midi_event(current_tick, std::move(programname));
+                    retval = std::make_unique<programname_meta_midi_event>(current_tick,
+                            std::move(programname));
                     fpos += len;
                 }
                 break;
@@ -277,7 +286,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::string devicename(reinterpret_cast<const char*>(&midi_data[fpos]),
                             reinterpret_cast<const char*>(&midi_data[fpos + len]));
-                    retval = new devicename_meta_midi_event(current_tick, std::move(devicename));
+                    retval = std::make_unique<devicename_meta_midi_event>(current_tick,
+                            std::move(devicename));
                     fpos += len;
                 }
                 break;
@@ -286,18 +296,20 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                     throw xcept("MIDI parser error: Invalid Channel Prefix "
                             "at 0x%X", fpos);
                 }
-                retval = new channelprefix_meta_midi_event(current_tick, midi_data[fpos++]);
+                retval = std::make_unique<channelprefix_meta_midi_event>(current_tick,
+                        midi_data[fpos++]);
                 break;
             case 0x21:
                 if (len != 1) {
                     throw xcept("MIDI parser error: Invalid MIDI Port "
                             "at 0x%X", fpos);
                 }
-                retval = new midiport_meta_midi_event(current_tick, midi_data[fpos++]);
+                retval = std::make_unique<midiport_meta_midi_event>(current_tick,
+                        midi_data[fpos++]);
                 break;
             case 0x2F:
                 // signal the calling function that the end of track has been reached
-                retval = nullptr;
+                // retval will keep the nullptr from initialization
                 break;
             case 0x51:
                 if (len != 3) {
@@ -307,7 +319,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                     uint32_t tempo = static_cast<uint32_t>(midi_data[fpos++] << 16);
                     tempo |= static_cast<uint32_t>(midi_data[fpos++] << 8);
                     tempo |= static_cast<uint32_t>(midi_data[fpos++]);
-                    retval = new tempo_meta_midi_event(current_tick, tempo);
+                    retval = std::make_unique<tempo_meta_midi_event>(current_tick, tempo);
                 }
                 break;
             case 0x54:
@@ -321,7 +333,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                     uint8_t second = midi_data[fpos++];
                     uint8_t frames = midi_data[fpos++];
                     uint8_t frame_fractions = midi_data[fpos++];
-                    retval = new smpteoffset_meta_midi_event(current_tick,
+                    retval = std::make_unique<smpteoffset_meta_midi_event>(current_tick,
                             frame_rate, hour, minute, second, frames,
                             frame_fractions);
                 }
@@ -335,7 +347,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                     uint8_t denominator = midi_data[fpos++];
                     uint8_t clocks = midi_data[fpos++];
                     uint8_t n32n = midi_data[fpos++];
-                    retval = new timesignature_meta_midi_event(current_tick,
+                    retval = std::make_unique<timesignature_meta_midi_event>(current_tick,
                             numerator, denominator, clocks, n32n);
                 }
                 break;
@@ -346,7 +358,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 } else {
                     int8_t sharp_flats = static_cast<int8_t>(midi_data[fpos++]);
                     bool _minor = static_cast<bool>(midi_data[fpos++]);
-                    retval = new keysignature_meta_midi_event(current_tick,
+                    retval = std::make_unique<keysignature_meta_midi_event>(current_tick,
                             sharp_flats, _minor);
                 }
                 break;
@@ -354,7 +366,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 {
                     std::vector<uint8_t> data(&midi_data[fpos], &midi_data[fpos + len]);
                     fpos += len;
-                    retval = new sequencerspecific_meta_midi_event(current_tick, std::move(data));
+                    retval = std::make_unique<sequencerspecific_meta_midi_event>(
+                            current_tick, std::move(data));
                 }
                 break;
             default:
@@ -377,11 +390,11 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 }
                 if (data[data.size() - 1] == 0x7F)
                     sysex_ongoing = false;
-                retval = new sysex_midi_event(current_tick,
+                retval = std::make_unique<sysex_midi_event>(current_tick,
                         std::move(data), false);
             } else {
                 // escape sequence
-                retval = new escape_midi_event(current_tick, std::move(data));
+                retval = std::make_unique<escape_midi_event>(current_tick, std::move(data));
             }
         } else if (ev_ch == 0x0) {
             // sysex begin
@@ -400,7 +413,7 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 sysex_ongoing = false;
             else
                 sysex_ongoing = true;
-            retval = new sysex_midi_event(current_tick, std::move(data), true);
+            retval = std::make_unique<sysex_midi_event>(current_tick, std::move(data), true);
         } else {
             throw xcept("MIDI parser error: Bad Byte 0xF%X "
                     " at 0x%X", ev_ch, fpos);
@@ -410,35 +423,35 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
         // parse dependent on running state
         switch (current_rs) {
         case running_state::NoteOff:
-            retval = new noteoff_message_midi_event(current_tick, current_midi_channel,
-                    cmd, midi_data.at(fpos++));
+            retval = std::make_unique<noteoff_message_midi_event>(current_tick,
+                    current_midi_channel, cmd, midi_data.at(fpos++));
             break;
         case running_state::NoteOn:
             {
                 uint8_t vel = midi_data.at(fpos++);
                 if (vel) {
-                    retval = new noteon_message_midi_event(current_tick, current_midi_channel,
-                            cmd, vel);
+                    retval = std::make_unique<noteon_message_midi_event>(current_tick,
+                            current_midi_channel, cmd, vel);
                 } else {
-                    retval = new noteoff_message_midi_event(current_tick, current_midi_channel,
-                            cmd, vel);
+                    retval = std::make_unique<noteoff_message_midi_event>(current_tick,
+                            current_midi_channel, cmd, vel);
                 }
             }
             break;
         case running_state::NoteAftertouch:
-            retval = new noteaftertouch_message_midi_event(current_tick, current_midi_channel,
-                    cmd, midi_data.at(fpos++));
+            retval = std::make_unique<noteaftertouch_message_midi_event>(current_tick,
+                    current_midi_channel, cmd, midi_data.at(fpos++));
             break;
         case running_state::Controller:
-            retval = new controller_message_midi_event(current_tick, current_midi_channel,
-                    cmd, midi_data.at(fpos++));
+            retval = std::make_unique<controller_message_midi_event>(current_tick,
+                    current_midi_channel, cmd, midi_data.at(fpos++));
             break;
         case running_state::Program:
-            retval = new program_message_midi_event(current_tick, current_midi_channel,
-                    cmd);
+            retval = std::make_unique<program_message_midi_event>(current_tick,
+                    current_midi_channel, cmd);
             break;
         case running_state::ChannelAftertouch:
-            retval = new channelaftertouch_message_midi_event(current_tick,
+            retval = std::make_unique<channelaftertouch_message_midi_event>(current_tick,
                     current_midi_channel, cmd);
             break;
         case running_state::PitchBend:
@@ -446,8 +459,8 @@ cppmidi::midi_event *cppmidi::read_event(const std::vector<uint8_t>& midi_data,
                 int16_t pitch = static_cast<int16_t>(cmd | ((midi_data.at(fpos++) & 0x7F) << 7));
                 // midi data is unsigned, parse as signed, subtract bias
                 pitch = static_cast<int16_t>(pitch - 0x2000);
-                retval = new pitchbend_message_midi_event(current_tick, current_midi_channel,
-                        pitch);
+                retval = std::make_unique<pitchbend_message_midi_event>(current_tick,
+                        current_midi_channel, pitch);
             }
             break;
         default:
@@ -499,54 +512,32 @@ static void load_type_zero(const std::vector<uint8_t>& midi_data, cppmidi::midi_
         if (overflow_tick >= 0x100000000)
             throw xcept("MIDI parser: Too many ticks for int32");
         current_tick = static_cast<uint32_t>(overflow_tick);
-        midi_event *ev = read_event(midi_data, fpos,
+        std::unique_ptr<midi_event> ev = read_event(midi_data, fpos,
                 current_midi_channel, current_state, sysex_ongoing,
                 current_tick);
-        if (ev == nullptr) {
+
+        if (!ev)
             break;
-        }
 
+        /* determinate the track index on which to insert
+         * the current MIDI event by examining its type */
         uint8_t insert_track = 0;
-
-        if (typeid(*ev) == typeid(noteoff_message_midi_event) ||
-                typeid(*ev) == typeid(noteon_message_midi_event) ||
-                typeid(*ev) == typeid(noteaftertouch_message_midi_event) ||
-                typeid(*ev) == typeid(controller_message_midi_event) ||
-                typeid(*ev) == typeid(program_message_midi_event) ||
-                typeid(*ev) == typeid(channelaftertouch_message_midi_event) ||
-                typeid(*ev) == typeid(pitchbend_message_midi_event)) {
-            insert_track = static_cast
-                <cppmidi::message_midi_event*>
-                (ev)->channel() & 0xF;
-        } else if (typeid(*ev) == typeid(sequencenumber_meta_midi_event) ||
-                typeid(*ev) == typeid(text_meta_midi_event) ||
-                typeid(*ev) == typeid(copyright_meta_midi_event) ||
-                typeid(*ev) == typeid(trackname_meta_midi_event) ||
-                typeid(*ev) == typeid(instrument_meta_midi_event) ||
-                typeid(*ev) == typeid(lyric_meta_midi_event) ||
-                typeid(*ev) == typeid(marker_meta_midi_event) ||
-                typeid(*ev) == typeid(cuepoint_meta_midi_event) ||
-                typeid(*ev) == typeid(program_message_midi_event) ||
-                typeid(*ev) == typeid(devicename_meta_midi_event) ||
-                typeid(*ev) == typeid(midiport_meta_midi_event) ||
-                typeid(*ev) == typeid(endoftrack_meta_midi_event) ||
-                typeid(*ev) == typeid(smpteoffset_meta_midi_event) ||
-                typeid(*ev) == typeid(timesignature_meta_midi_event) ||
-                typeid(*ev) == typeid(keysignature_meta_midi_event) ||
-                typeid(*ev) == typeid(sequencerspecific_meta_midi_event)) {
-            insert_track = current_meta_track;
-        } else if (typeid(*ev) == typeid(channelprefix_meta_midi_event)) {
-            insert_track = current_meta_track = static_cast
-                <cppmidi::channelprefix_meta_midi_event*>
-                (ev)->get_channel() & 0xF;
-        } else if (typeid(*ev) == typeid(tempo_meta_midi_event) ||
-                typeid(*ev) == typeid(tempo_meta_midi_event) ||
+        if (typeid(*ev) == typeid(tempo_meta_midi_event) ||
                 typeid(*ev) == typeid(sysex_midi_event) ||
                 typeid(*ev) == typeid(escape_midi_event)) {
             insert_track = 0;
+        } else if (typeid(*ev) == typeid(channelprefix_meta_midi_event)) {
+            insert_track = current_meta_track = static_cast
+                <cppmidi::channelprefix_meta_midi_event&>
+                (*ev).get_channel() & 0xF;
+        } else if (dynamic_cast<cppmidi::message_midi_event *>(ev.get())) {
+            insert_track = static_cast<cppmidi::message_midi_event&>
+                (*ev).channel() & 0xF;
+        } else if (dynamic_cast<cppmidi::meta_midi_event *>(ev.get())) {
+            insert_track = current_meta_track;
         }
 
-        mf.midi_tracks[insert_track].midi_events.emplace_back(ev);
+        mf.midi_tracks[insert_track].midi_events.emplace_back(std::move(ev));
     }
 
     if (track_start + track_length != fpos) {
@@ -589,13 +580,14 @@ static void load_type_one(const std::vector<uint8_t>& midi_data, cppmidi::midi_f
                 throw xcept("MIDI parser: Too many ticks for int32");
             current_tick = static_cast<uint32_t>(overflow_tick);
             //printf("Parsing Event at location 0x%zX\n", fpos);
-            cppmidi::midi_event *ev = read_event(midi_data, fpos,
+            std::unique_ptr<cppmidi::midi_event> ev = read_event(midi_data, fpos,
                     current_midi_channel, current_state, sysex_ongoing,
                     current_tick);
-            if (ev == nullptr) {
+
+            if (!ev)
                 break;
-            }
-            mf.midi_tracks[trk].midi_events.emplace_back(ev);
+
+            mf.midi_tracks[trk].midi_events.emplace_back(std::move(ev));
         }
 
         if (track_start + track_length != fpos) {
