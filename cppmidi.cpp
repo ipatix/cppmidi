@@ -17,6 +17,19 @@ static void throw_assert(T a, V b, const std::string& msg) {
         throw cppmidi::xcept("%s", msg.c_str());
 }
 
+static std::string byte2str(uint8_t b) {
+    auto val2char = [](int v) {
+        if (v >= 0 && v <= 9)
+            return static_cast<char>(v + '0');
+        else
+            return static_cast<char>(v - 10 + 'A');
+    };
+    std::string result;
+    result += val2char(b >> 4);
+    result += val2char(b & 0xF);
+    return result;
+}
+
 // converts an uint to a [v]ariable [l]ength [v]alue
 std::vector<uint8_t> cppmidi::len2vlv(uint64_t len) {
     if (len >= (1uLL << 28)) {
@@ -730,6 +743,15 @@ void cppmidi::midi_file::save_to_file(const std::filesystem::path& file_path) co
     fout.close();
 }
 
+void cppmidi::midi_track::print(std::ostream& os, const std::string& indent) const {
+    std::string event_indent = indent + "  ";
+
+    for (const auto& ev_ptr : midi_events) {
+        ev_ptr->print(os, event_indent);
+        os << std::endl;
+    }
+}
+
 void cppmidi::midi_track::sort_events() {
     auto cmp = [](
             const std::unique_ptr<cppmidi::midi_event>& a,
@@ -767,10 +789,28 @@ void cppmidi::midi_file::convert_time_division(uint16_t time_division) {
     this->time_division = time_division;
 }
 
+void cppmidi::midi_file::print(std::ostream& os, const std::string& indent) const {
+    std::string track_indent = indent + "  ";
+
+    os << indent << "File Begin:" << std::endl;
+
+    for (size_t iTrk = 0; iTrk < midi_tracks.size(); iTrk++) {
+        os << track_indent << "Track #" << iTrk << " Begin:" << std::endl;
+        midi_tracks.at(iTrk).print(os, track_indent);
+        os << track_indent << "Track #" << iTrk << " End" << std::endl;
+    }
+
+    os << indent << "File End" << std::endl;
+}
+
 //=============================================================================
 
 std::vector<uint8_t> cppmidi::dummy_midi_event::event_data() const {
     throw xcept("dummy events cannot be serialized");
+}
+
+void cppmidi::dummy_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Dummy";
 }
 
 std::vector<uint8_t> cppmidi::noteoff_message_midi_event::event_data() const {
@@ -780,11 +820,21 @@ std::vector<uint8_t> cppmidi::noteoff_message_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::noteoff_message_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Chn. #" << +midi_channel <<
+        ": Note Off: key=" << +key << " velocity=" << +velocity;
+}
+
 std::vector<uint8_t> cppmidi::noteon_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0x9 << 4)), key, velocity
     };
     return retval;
+}
+
+void cppmidi::noteon_message_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Chn. #" << +midi_channel <<
+        ": Note On: key=" << +key << " velocity=" << +velocity;
 }
 
 std::vector<uint8_t> cppmidi::noteaftertouch_message_midi_event::event_data() const {
@@ -794,11 +844,21 @@ std::vector<uint8_t> cppmidi::noteaftertouch_message_midi_event::event_data() co
     return retval;
 }
 
+void cppmidi::noteaftertouch_message_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Chn. #" << +midi_channel <<
+        ": Note Aftertouch: key=" << +key << " value=" << +value;
+}
+
 std::vector<uint8_t> cppmidi::controller_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0xB << 4)), controller, value
     };
     return retval;
+}
+
+void cppmidi::controller_message_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Chn. #" << +midi_channel <<
+        ": Controller: cc=" << +controller << " value=" << +value;
 }
 
 std::vector<uint8_t> cppmidi::program_message_midi_event::event_data() const {
@@ -808,11 +868,21 @@ std::vector<uint8_t> cppmidi::program_message_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::program_message_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Chn. #" << +midi_channel <<
+        ": Program: no=" << +program;
+}
+
 std::vector<uint8_t> cppmidi::channelaftertouch_message_midi_event::event_data() const {
     std::vector<uint8_t> retval = {
         static_cast<uint8_t>(midi_channel | (0xD << 4)), value
     };
     return retval;
+}
+
+void cppmidi::channelaftertouch_message_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Chn. #" << +midi_channel <<
+        ": Channel Aftertouch: value=" << +value;
 }
 
 std::vector<uint8_t> cppmidi::pitchbend_message_midi_event::event_data() const {
@@ -823,6 +893,11 @@ std::vector<uint8_t> cppmidi::pitchbend_message_midi_event::event_data() const {
         static_cast<uint8_t>((pitch_biased >> 7) & 0x7F)
     };
     return retval;
+}
+
+void cppmidi::pitchbend_message_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Chn. #" << +midi_channel <<
+        ": Pitch Bend: pitch=" << pitch;
 }
 
 //=============================================================================
@@ -843,6 +918,14 @@ std::vector<uint8_t> cppmidi::sequencenumber_meta_midi_event::event_data() const
     }
 }
 
+void cppmidi::sequencenumber_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Sequence Number: ";
+    if (empty)
+        os << "empty";
+    else
+        os << "seq_num=" << +seq_num;
+}
+
 std::vector<uint8_t> cppmidi::text_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x01 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -851,6 +934,10 @@ std::vector<uint8_t> cppmidi::text_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
+}
+
+void cppmidi::text_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Text: " << text;
 }
 
 std::vector<uint8_t> cppmidi::copyright_meta_midi_event::event_data() const {
@@ -863,6 +950,10 @@ std::vector<uint8_t> cppmidi::copyright_meta_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::copyright_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Copyright: " << text;
+}
+
 std::vector<uint8_t> cppmidi::trackname_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x03 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -871,6 +962,10 @@ std::vector<uint8_t> cppmidi::trackname_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
+}
+
+void cppmidi::trackname_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Track Name: " << text;
 }
 
 std::vector<uint8_t> cppmidi::instrument_meta_midi_event::event_data() const {
@@ -883,6 +978,10 @@ std::vector<uint8_t> cppmidi::instrument_meta_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::instrument_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Instrument Name: " << text;
+}
+
 std::vector<uint8_t> cppmidi::lyric_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x05 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -891,6 +990,10 @@ std::vector<uint8_t> cppmidi::lyric_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
+}
+
+void cppmidi::lyric_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Lyric: " << text;
 }
 
 std::vector<uint8_t> cppmidi::marker_meta_midi_event::event_data() const {
@@ -903,6 +1006,10 @@ std::vector<uint8_t> cppmidi::marker_meta_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::marker_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Marker: " << text;
+}
+
 std::vector<uint8_t> cppmidi::cuepoint_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x07 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -911,6 +1018,10 @@ std::vector<uint8_t> cppmidi::cuepoint_meta_midi_event::event_data() const {
             reinterpret_cast<const uint8_t*>(&text[0]),
             reinterpret_cast<const uint8_t*>(&text[text.size()]));
     return retval;
+}
+
+void cppmidi::cuepoint_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Cue Point : " << text;
 }
 
 std::vector<uint8_t> cppmidi::programname_meta_midi_event::event_data() const {
@@ -923,6 +1034,10 @@ std::vector<uint8_t> cppmidi::programname_meta_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::programname_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Program Name: " << text;
+}
+
 std::vector<uint8_t> cppmidi::devicename_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x09 };
     std::vector<uint8_t> vlv = len2vlv(text.size());
@@ -933,9 +1048,17 @@ std::vector<uint8_t> cppmidi::devicename_meta_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::devicename_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Device Name: " << text;
+}
+
 std::vector<uint8_t> cppmidi::channelprefix_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x20, 1, channel };
     return retval;
+}
+
+void cppmidi::channelprefix_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Channel Prefix: " << +channel;
 }
 
 std::vector<uint8_t> cppmidi::midiport_meta_midi_event::event_data() const {
@@ -943,9 +1066,17 @@ std::vector<uint8_t> cppmidi::midiport_meta_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::midiport_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta MIDI Port: " << +port;
+}
+
 std::vector<uint8_t> cppmidi::endoftrack_meta_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xFF, 0x2F, 0 };
     return retval;
+}
+
+void cppmidi::endoftrack_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta End of Track";
 }
 
 std::vector<uint8_t> cppmidi::tempo_meta_midi_event::event_data() const {
@@ -956,10 +1087,21 @@ std::vector<uint8_t> cppmidi::tempo_meta_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::tempo_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Tempo: " << get_bpm() << " BPM";
+}
+
 std::vector<uint8_t> cppmidi::smpteoffset_meta_midi_event::event_data() const {
     uint8_t hr = static_cast<uint8_t>((frame_rate << 6) | hour);
     std::vector<uint8_t> retval = { 0xFF, 0x54, 5, hr, minute, second, frames, frame_fractions };
     return retval;
+}
+
+void cppmidi::smpteoffset_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta SMPTE Offset: " <<
+        "frame_rate=" << +frame_rate << " hour=" << +hour <<
+        " minute=" << +minute << " second=" << +second <<
+        " frames=" << +frames << " frame_fractions=" << +frame_fractions;
 }
 
 void cppmidi::smpteoffset_meta_midi_event::errchk() {
@@ -980,10 +1122,33 @@ std::vector<uint8_t> cppmidi::timesignature_meta_midi_event::event_data() const 
     return retval;
 }
 
+void cppmidi::timesignature_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    size_t den = 1;
+    for (uint8_t i = 0; i < denominator; i++)
+        den *= 2;
+    os << indent << "t=" << ticks << ": Meta Time Signature: " <<
+        +numerator << "/" << den << " ticks_per_metronome_click=" << +tick_clocks <<
+        " 32nd_per_quarter=" << +n32n;
+}
+
 std::vector<uint8_t> cppmidi::keysignature_meta_midi_event::event_data() const {
     uint8_t sf = static_cast<uint8_t>(sharp_flats);
     std::vector<uint8_t> retval = { 0xFF, 0x59, 2, sf, _minor };
     return retval;
+}
+
+void cppmidi::keysignature_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Key Signature: ";
+
+    if (_minor)
+        os << "minor";
+    else
+        os << "major";
+
+    if (sharp_flats >= 0)
+        os << " num_sharps=" << +sharp_flats;
+    else
+        os << " num_flats=" << -sharp_flats;
 }
 
 void cppmidi::keysignature_meta_midi_event::errchk() {
@@ -997,6 +1162,18 @@ std::vector<uint8_t> cppmidi::sequencerspecific_meta_midi_event::event_data() co
     retval.insert(retval.end(), vlv.begin(), vlv.end());
     retval.insert(retval.end(), data.begin(), data.end());
     return retval;
+}
+
+void cppmidi::sequencerspecific_meta_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Meta Sequencer Specific: ";
+    if (data.size() == 0) {
+        os << "<empty>";
+    } else {
+        os << byte2str(data.at(0));
+        for (size_t i = 1; i < data.size(); i++) {
+            os << " " << byte2str(data.at(i));
+        }
+    }
 }
 
 //=============================================================================
@@ -1013,12 +1190,44 @@ std::vector<uint8_t> cppmidi::sysex_midi_event::event_data() const {
     return retval;
 }
 
+void cppmidi::sysex_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": SysEx: ";
+
+    if (first_chunk) {
+        os << "begin ";
+    } else {
+        os << "continue ";
+    }
+
+    if (data.size() == 0) {
+        os << "<empty>";
+    } else {
+        os << byte2str(data.at(0));
+        for (size_t i = 1; i < data.size(); i++) {
+            os << " " << byte2str(data.at(i));
+        }
+    }
+}
+
 std::vector<uint8_t> cppmidi::escape_midi_event::event_data() const {
     std::vector<uint8_t> retval = { 0xF7 };
     std::vector<uint8_t> vlv = len2vlv(data.size());
     retval.insert(retval.end(), vlv.begin(), vlv.end());
     retval.insert(retval.end(), data.begin(), data.end());
     return retval;
+}
+
+void cppmidi::escape_midi_event::print(std::ostream& os, const std::string& indent) const {
+    os << indent << "t=" << ticks << ": Escape: ";
+
+    if (data.size() == 0) {
+        os << "<empty>";
+    } else {
+        os << byte2str(data.at(0));
+        for (size_t i = 1; i < data.size(); i++) {
+            os << " " << byte2str(data.at(i));
+        }
+    }
 }
 
 //=============================================================================
