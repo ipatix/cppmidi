@@ -32,8 +32,14 @@
 *.app
 
 # example binaries
+examples/delete_sysex
+examples/delete_sysex.exe
 examples/midi_read_write
+examples/midi_read_write.exe
 examples/write_notes
+examples/write_notes.exe
 examples/write_notes.mid
 examples/scale_velocity
+examples/scale_velocity.exe
 examples/to_text
+examples/to_text.exe
