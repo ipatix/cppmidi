@@ -43,3 +43,5 @@ examples/scale_velocity
 examples/scale_velocity.exe
 examples/to_text
 examples/to_text.exe
+examples/map_instruments
+examples/map_instruments.exe
